@@ -1,0 +1,1 @@
+"""STOPICK Streamlit UI package."""
