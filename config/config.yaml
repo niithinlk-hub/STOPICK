@@ -1,0 +1,79 @@
+runtime:
+  app_name: STOPICK
+  default_country: BOTH
+  default_setup_type: breakout
+  min_score_default: 75
+  cache_ttl_minutes: 30
+  max_symbols_per_scan: 250
+  capital_base: 1000000
+  risk_per_trade_pct: 0.5
+  slippage_bps: 5
+  brokerage_bps: 3
+  taxes_bps: 2
+
+data:
+  default_provider: yfinance
+  supported_intervals:
+    - 1d
+    - 1h
+    - 15m
+    - 5m
+  benchmark_map:
+    NSE:
+      broad: ^NSEI
+      broad_alt: ^CRSLDX
+      bank: ^NSEBANK
+      tech: ^CNXIT
+    US:
+      broad: SPY
+      growth: QQQ
+      semis: SMH
+      financials: XLF
+  earnings_window_days: 7
+  results_window_days: 7
+
+scoring_profiles:
+  bullish_breakout:
+    weights:
+      trend_alignment: 15
+      structure_quality: 12
+      breakout_quality: 16
+      pullback_quality: 6
+      volume_confirmation: 12
+      volatility_regime: 8
+      relative_strength: 10
+      htf_headroom: 8
+      rr_ratio: 8
+      market_regime: 5
+      event_risk: 5
+      index_alignment: 5
+    grade_thresholds:
+      A+: 90
+      A: 85
+      B: 75
+      C: 65
+  bullish_pullback:
+    weights:
+      trend_alignment: 14
+      structure_quality: 13
+      breakout_quality: 10
+      pullback_quality: 16
+      volume_confirmation: 10
+      volatility_regime: 7
+      relative_strength: 10
+      htf_headroom: 7
+      rr_ratio: 8
+      market_regime: 5
+      event_risk: 5
+      index_alignment: 5
+    grade_thresholds:
+      A+: 90
+      A: 85
+      B: 75
+      C: 65
+
+alerts: {}
+
+universe_files:
+  nse_sample: config/watchlist_nse_sample.txt
+  us_sample: config/watchlist_us_sample.txt
