@@ -6,7 +6,7 @@ import pandas as pd
 
 from config import load_app_config
 from data.loaders import DataEngine
-from data.providers import BaseMarketDataProvider
+from data.providers import BaseMarketDataProvider, YFinanceProvider
 from data.symbols import SymbolRecord, benchmark_for_market, normalize_symbol, parse_manual_watchlist
 from stopick_app.workstation import _timeframes_for_scan
 
@@ -42,3 +42,21 @@ def test_symbol_helpers_and_loader_cache() -> None:
     frame = engine.fetch_symbol(record, "1d", refresh=True)
     assert not frame.empty
     assert benchmark_for_market("US", config.data.benchmark_map) == "SPY"
+
+
+def test_yfinance_normalizes_multiindex_history() -> None:
+    history = pd.DataFrame(
+        {
+            ("Adj Close", "AAPL"): [200.0, 201.0],
+            ("Close", "AAPL"): [202.0, 203.0],
+            ("High", "AAPL"): [204.0, 205.0],
+            ("Low", "AAPL"): [199.0, 200.0],
+            ("Open", "AAPL"): [201.0, 202.0],
+            ("Volume", "AAPL"): [1000, 1100],
+        },
+        index=pd.date_range("2025-01-01", periods=2, freq="D", tz="UTC", name="Date"),
+    )
+    normalized = YFinanceProvider._normalize_history_frame(history, "AAPL")
+    assert list(normalized.columns) == ["datetime", "open", "high", "low", "close", "volume", "symbol"]
+    assert normalized["symbol"].tolist() == ["AAPL", "AAPL"]
+    assert normalized["close"].tolist() == [202.0, 203.0]

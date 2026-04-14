@@ -28,6 +28,43 @@ class BaseMarketDataProvider(ABC):
 
 
 class YFinanceProvider(BaseMarketDataProvider):
+    @staticmethod
+    def _normalize_history_frame(history: pd.DataFrame, symbol: str) -> pd.DataFrame:
+        if history.empty:
+            return pd.DataFrame(columns=["datetime", "open", "high", "low", "close", "volume", "symbol"])
+
+        frame = history.copy()
+        if isinstance(frame.columns, pd.MultiIndex):
+            frame.columns = [str(column[0]) for column in frame.columns.to_flat_index()]
+
+        frame = frame.reset_index()
+        datetime_column = next(
+            (column for column in frame.columns if str(column).lower() in {"date", "datetime"}),
+            frame.columns[0],
+        )
+        frame = frame.rename(
+            columns={
+                datetime_column: "datetime",
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Close": "close",
+                "Volume": "volume",
+            },
+        )
+        if "close" not in frame.columns and "Adj Close" in frame.columns:
+            frame = frame.rename(columns={"Adj Close": "close"})
+
+        required_columns = ["datetime", "open", "high", "low", "close", "volume"]
+        for column in required_columns:
+            if column not in frame.columns:
+                frame[column] = pd.NA
+        frame["datetime"] = pd.to_datetime(frame["datetime"], utc=True, errors="coerce")
+        frame["symbol"] = display_symbol(symbol)
+        return frame[["datetime", "open", "high", "low", "close", "volume", "symbol"]].dropna(
+            subset=["datetime", "open", "high", "low", "close"],
+        )
+
     def fetch_ohlcv(
         self,
         symbol: str,
@@ -49,25 +86,7 @@ class YFinanceProvider(BaseMarketDataProvider):
             progress=False,
             threads=False,
         )
-        if history.empty:
-            return pd.DataFrame(columns=["datetime", "open", "high", "low", "close", "volume", "symbol"])
-
-        frame = history.reset_index().rename(
-            columns={
-                "Date": "datetime",
-                "Datetime": "datetime",
-                "Open": "open",
-                "High": "high",
-                "Low": "low",
-                "Close": "close",
-                "Volume": "volume",
-            },
-        )
-        frame["datetime"] = pd.to_datetime(frame["datetime"], utc=True, errors="coerce")
-        frame["symbol"] = display_symbol(symbol)
-        return frame[["datetime", "open", "high", "low", "close", "volume", "symbol"]].dropna(
-            subset=["datetime", "open", "high", "low", "close"],
-        )
+        return self._normalize_history_frame(history, symbol)
 
     def fetch_corporate_calendar(self, symbols: Iterable[str]) -> pd.DataFrame:
         rows: list[dict[str, str | None]] = []

@@ -74,7 +74,10 @@ def _render_scanner(bundle: ScanBundle | None) -> None:
             failure_df = pd.DataFrame({"symbol": list(bundle.failures.keys()), "error": list(bundle.failures.values())})
             st.dataframe(failure_df, width="stretch")
         else:
-            st.info("The scan completed successfully, but nothing met the current minimum-score threshold.")
+            st.info(
+                "The scan completed successfully, but nothing met the current minimum-score threshold. "
+                "If you are scanning the sample watchlist, try lowering the threshold from 75 to 65 or 60.",
+            )
         return
     results = bundle.results.copy()
     col1, col2, col3 = st.columns(3)
@@ -266,7 +269,13 @@ def run_dashboard() -> None:
     source = st.sidebar.selectbox("Watchlist source", ["sample", "manual"])
     timeframe = st.sidebar.selectbox("Timeframe", ["1d", "4h", "1h", "15m"])
     setup_mode = st.sidebar.selectbox("Setup type", ["both", "breakout", "pullback"])
-    min_score = st.sidebar.slider("Minimum score", 50, 100, config.runtime.min_score_default)
+    min_score = st.sidebar.slider(
+        "Minimum score",
+        50,
+        100,
+        config.runtime.min_score_default,
+        help="Higher values are stricter. If the sample universe returns no setups, try 65 or 60.",
+    )
     refresh = st.sidebar.checkbox("Refresh market data", value=False)
     manual_watchlist = st.sidebar.text_area("Manual watchlist", value="RELIANCE, TCS, AAPL, NVDA", disabled=source != "manual")
     uploaded_file = st.sidebar.file_uploader("Upload watchlist CSV or TXT", type=["csv", "txt"])
