@@ -25,6 +25,19 @@ class ScanBundle:
     frame_cache: dict[str, dict[str, pd.DataFrame]]
     failures: dict[str, str]
     benchmark_frames: dict[str, pd.DataFrame]
+    scanned_symbols: int
+    successful_symbols: int
+    notes: list[str]
+
+
+def _timeframes_for_scan(scan_timeframe: str) -> list[str]:
+    if scan_timeframe == "1d":
+        return ["1d"]
+    if scan_timeframe == "4h":
+        return ["1d", "4h"]
+    if scan_timeframe == "1h":
+        return ["1d", "4h", "1h"]
+    return ["1d", "4h", "1h", "15m"]
 
 
 def _records_from_source(
@@ -68,10 +81,21 @@ def _records_from_source(
     return list(unique.values())[: config.runtime.max_symbols_per_scan]
 
 
-def _event_map(data_engine: DataEngine, records: list[SymbolRecord]) -> dict[str, int | None]:
-    calendar = data_engine.provider.fetch_corporate_calendar(record.symbol for record in records)
+def _event_map(data_engine: DataEngine, records: list[SymbolRecord]) -> tuple[dict[str, int | None], list[str]]:
+    default_map = {display_symbol(record.symbol): None for record in records}
+    notes: list[str] = []
+    if not records:
+        return default_map, notes
+    if len(records) > 10:
+        notes.append("Event-calendar lookup was skipped for this larger scan to keep the scanner responsive.")
+        return default_map, notes
+    try:
+        calendar = data_engine.provider.fetch_corporate_calendar(record.symbol for record in records)
+    except Exception as exc:
+        notes.append(f"Event-calendar lookup was unavailable: {exc}")
+        return default_map, notes
     if calendar.empty:
-        return {display_symbol(record.symbol): None for record in records}
+        return default_map, notes
     calendar["event_date"] = pd.to_datetime(calendar["event_date"], utc=True, errors="coerce")
     now = pd.Timestamp.utcnow()
     event_days: dict[str, int | None] = {}
@@ -82,7 +106,7 @@ def _event_map(data_engine: DataEngine, records: list[SymbolRecord]) -> dict[str
             event_days[str(row["symbol"])] = int((row["event_date"] - now).days)
     for record in records:
         event_days.setdefault(display_symbol(record.symbol), None)
-    return event_days
+    return event_days, notes
 
 
 def scan_market(
@@ -107,7 +131,7 @@ def scan_market(
         uploaded_watchlist_text=uploaded_watchlist_text,
         uploaded_watchlist_frame=uploaded_watchlist_frame,
     )
-    event_days = _event_map(data_engine, records)
+    event_days, notes = _event_map(data_engine, records)
 
     frame_cache: dict[str, dict[str, pd.DataFrame]] = {}
     benchmark_frames: dict[str, pd.DataFrame] = {}
@@ -115,7 +139,7 @@ def scan_market(
     setups: list[SetupSignal] = []
     setup_metrics: dict[str, dict[str, float]] = {}
 
-    multi_timeframes = ["1d", "4h", "1h", "15m"]
+    multi_timeframes = _timeframes_for_scan(scan_timeframe)
     for record in records:
         frame_map: dict[str, pd.DataFrame] = {}
         try:
@@ -233,4 +257,13 @@ def scan_market(
             },
         )
     results = pd.DataFrame(rows).sort_values(["score", "relative_strength_score"], ascending=[False, False], kind="mergesort") if rows else pd.DataFrame()
-    return ScanBundle(setups=setups, results=results, frame_cache=frame_cache, failures=failures, benchmark_frames=benchmark_frames)
+    return ScanBundle(
+        setups=setups,
+        results=results,
+        frame_cache=frame_cache,
+        failures=failures,
+        benchmark_frames=benchmark_frames,
+        scanned_symbols=len(records),
+        successful_symbols=len(frame_cache),
+        notes=notes,
+    )

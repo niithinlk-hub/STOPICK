@@ -58,8 +58,23 @@ def _export_chart_png(fig: go.Figure) -> bytes | None:
 
 def _render_scanner(bundle: ScanBundle | None) -> None:
     st.subheader("Scanner")
-    if bundle is None or bundle.results.empty:
+    if bundle is None:
         st.info("Run a scan to populate high-conviction setups.")
+        return
+    summary_cols = st.columns(4)
+    summary_cols[0].metric("Symbols requested", bundle.scanned_symbols)
+    summary_cols[1].metric("Data loaded", bundle.successful_symbols)
+    summary_cols[2].metric("Failures", len(bundle.failures))
+    summary_cols[3].metric("Qualified setups", 0 if bundle.results.empty else len(bundle.results))
+    for note in bundle.notes:
+        st.caption(note)
+    if bundle.results.empty:
+        if bundle.failures:
+            st.warning("The scan finished, but no symbols produced qualifying rows. The failure log below explains what data calls failed.")
+            failure_df = pd.DataFrame({"symbol": list(bundle.failures.keys()), "error": list(bundle.failures.values())})
+            st.dataframe(failure_df, width="stretch")
+        else:
+            st.info("The scan completed successfully, but nothing met the current minimum-score threshold.")
         return
     results = bundle.results.copy()
     col1, col2, col3 = st.columns(3)
@@ -89,6 +104,10 @@ def _render_scanner(bundle: ScanBundle | None) -> None:
 
     st.dataframe(filtered, width="stretch")
     st.download_button("Export setups CSV", filtered.to_csv(index=False), "stopick_setups.csv", "text/csv")
+    if bundle.failures:
+        with st.expander("Show symbol download failures"):
+            failure_df = pd.DataFrame({"symbol": list(bundle.failures.keys()), "error": list(bundle.failures.values())})
+            st.dataframe(failure_df, width="stretch")
 
 
 def _render_top_setups(bundle: ScanBundle | None) -> None:
@@ -274,6 +293,7 @@ def run_dashboard() -> None:
                 uploaded_watchlist_frame=uploaded_frame,
                 refresh_data=refresh,
             )
+        st.rerun()
 
     bundle: ScanBundle | None = st.session_state.get("stopick_bundle")
     if page == "Scanner":

@@ -8,6 +8,7 @@ from config import load_app_config
 from data.loaders import DataEngine
 from data.providers import BaseMarketDataProvider
 from data.symbols import SymbolRecord, benchmark_for_market, normalize_symbol, parse_manual_watchlist
+from stopick_app.workstation import _timeframes_for_scan
 
 
 class StubProvider(BaseMarketDataProvider):
@@ -32,6 +33,8 @@ class StubProvider(BaseMarketDataProvider):
 def test_symbol_helpers_and_loader_cache() -> None:
     assert normalize_symbol("reliance", "NSE") == "RELIANCE.NS"
     assert parse_manual_watchlist("AAPL, MSFT", "US") == ["AAPL", "MSFT"]
+    assert _timeframes_for_scan("1d") == ["1d"]
+    assert _timeframes_for_scan("4h") == ["1d", "4h"]
 
     config = load_app_config(Path(__file__).resolve().parent.parent)
     engine = DataEngine(config, provider=StubProvider())
