@@ -10,6 +10,7 @@ from data.symbols import SymbolRecord, benchmark_for_market, display_symbol, loa
 from risk.planner import build_execution_plan
 from scoring.engine import score_setup_signal
 from signals.breakout import find_best_breakout
+from signals.common import atr, rolling_percentile
 from signals.context import analyze_market_regime, analyze_relative_strength, analyze_volume_participation
 from signals.models import SetupSignal
 from signals.pullback import find_pullback_entry
@@ -33,6 +34,7 @@ def _records_from_source(
     source: str,
     manual_watchlist: str = "",
     uploaded_watchlist_text: str | None = None,
+    uploaded_watchlist_frame: pd.DataFrame | None = None,
 ) -> list[SymbolRecord]:
     records: list[SymbolRecord] = []
     if source == "sample":
@@ -41,6 +43,24 @@ def _records_from_source(
         if country in {"US", "BOTH"}:
             records.extend(SymbolRecord(symbol=symbol, market="US", exchange="US") for symbol in load_watchlist_file(config.universe_files["us_sample"], "US"))
     else:
+        if uploaded_watchlist_frame is not None and not uploaded_watchlist_frame.empty:
+            symbol_column = "symbol" if "symbol" in uploaded_watchlist_frame.columns else "ticker"
+            for _, row in uploaded_watchlist_frame.iterrows():
+                market = str(row.get("market", country if country != "BOTH" else "US")).upper()
+                if country != "BOTH" and market != country:
+                    continue
+                symbol = str(row.get(symbol_column, "")).strip()
+                if not symbol:
+                    continue
+                records.append(
+                    SymbolRecord(
+                        symbol=symbol if market == "US" or symbol.endswith(".NS") else f"{symbol}.NS",
+                        market=market,
+                        exchange=str(row.get("exchange", market)),
+                        sector=str(row.get("sector", "Unknown")),
+                        market_cap_bucket=str(row.get("market_cap_bucket", "Unknown")),
+                    ),
+                )
         text = uploaded_watchlist_text or manual_watchlist
         for market in (["NSE", "US"] if country == "BOTH" else [country]):
             records.extend(SymbolRecord(symbol=symbol, market=market, exchange=market) for symbol in parse_manual_watchlist(text, market))
@@ -75,6 +95,7 @@ def scan_market(
     setup_mode: str,
     manual_watchlist: str = "",
     uploaded_watchlist_text: str | None = None,
+    uploaded_watchlist_frame: pd.DataFrame | None = None,
     refresh_data: bool = False,
 ) -> ScanBundle:
     data_engine = DataEngine(config)
@@ -84,6 +105,7 @@ def scan_market(
         source=source,
         manual_watchlist=manual_watchlist,
         uploaded_watchlist_text=uploaded_watchlist_text,
+        uploaded_watchlist_frame=uploaded_watchlist_frame,
     )
     event_days = _event_map(data_engine, records)
 
@@ -91,6 +113,7 @@ def scan_market(
     benchmark_frames: dict[str, pd.DataFrame] = {}
     failures: dict[str, str] = {}
     setups: list[SetupSignal] = []
+    setup_metrics: dict[str, dict[str, float]] = {}
 
     multi_timeframes = ["1d", "4h", "1h", "15m"]
     for record in records:
@@ -128,6 +151,8 @@ def scan_market(
                 event_proximity_days=event_days.get(display_symbol(record.symbol)),
             )
             pullback = find_pullback_entry(scan_frame, breakout, structure)
+            avg_volume_20 = round(float(scan_frame["volume"].tail(20).mean()), 2)
+            atr_pct = round(float(rolling_percentile(atr(scan_frame, 14), 252).iloc[-1] * 100.0), 2) if len(scan_frame) >= 30 else 0.0
 
             for family in (["breakout", "pullback"] if setup_mode == "both" else [setup_mode]):
                 if family == "breakout" and not breakout.is_valid:
@@ -171,18 +196,21 @@ def scan_market(
                 setup.grade = grade
                 if score >= minimum_score:
                     setups.append(setup)
+                    setup_metrics[f"{setup.ticker}|{family}"] = {"avg_volume_20": avg_volume_20, "atr_percentile": atr_pct}
             frame_cache[record.symbol] = frame_map
         except Exception as exc:
             failures[record.symbol] = str(exc)
 
     rows = []
     for setup in setups:
+        metrics = setup_metrics.get(f"{setup.ticker}|{setup.setup_family}", {})
         rows.append(
             {
                 "ticker": setup.ticker,
                 "market": setup.market,
                 "exchange": setup.exchange,
                 "sector": setup.sector,
+                "market_cap_bucket": next((record.market_cap_bucket for record in records if display_symbol(record.symbol) == setup.ticker), "Unknown"),
                 "timeframe": setup.timeframe,
                 "setup_family": setup.setup_family,
                 "pattern": setup.breakout.pattern_name,
@@ -193,7 +221,9 @@ def scan_market(
                 "breakout_level": setup.breakout.breakout_level,
                 "current_price": setup.breakout.current_price,
                 "distance_pct": setup.breakout.distance_pct,
+                "avg_volume_20": metrics.get("avg_volume_20"),
                 "volume_ratio": setup.volume.volume_ratio if setup.volume else None,
+                "atr_percentile": metrics.get("atr_percentile"),
                 "relative_strength_score": setup.relative_strength.score if setup.relative_strength else None,
                 "event_risk_days": setup.event_risk_days,
                 "why_this_qualified": " | ".join(setup.reasons_for[:3]),

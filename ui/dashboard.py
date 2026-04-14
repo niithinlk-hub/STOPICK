@@ -61,8 +61,34 @@ def _render_scanner(bundle: ScanBundle | None) -> None:
     if bundle is None or bundle.results.empty:
         st.info("Run a scan to populate high-conviction setups.")
         return
-    st.dataframe(bundle.results, width="stretch")
-    st.download_button("Export setups CSV", bundle.results.to_csv(index=False), "stopick_setups.csv", "text/csv")
+    results = bundle.results.copy()
+    col1, col2, col3 = st.columns(3)
+    markets = sorted(results["market"].dropna().unique().tolist())
+    exchanges = sorted(results["exchange"].dropna().unique().tolist())
+    sectors = sorted(results["sector"].dropna().unique().tolist())
+    selected_markets = col1.multiselect("Country / market", markets, default=markets)
+    selected_exchanges = col2.multiselect("Exchange", exchanges, default=exchanges)
+    selected_sectors = col3.multiselect("Sector", sectors, default=sectors)
+    price_min, price_max = float(results["current_price"].min()), float(results["current_price"].max())
+    volume_floor = st.slider("Minimum average volume", 0.0, float(results["avg_volume_20"].fillna(0.0).max()), 0.0)
+    atr_floor = st.slider("Minimum ATR percentile", 0.0, 100.0, 0.0)
+    event_cap = st.slider("Maximum event proximity days", 0, 30, 30, help="Filters earnings/results proximity when event data is available.")
+    price_range = st.slider("Price range", min_value=price_min, max_value=price_max, value=(price_min, price_max))
+
+    filtered = results.copy()
+    if selected_markets:
+        filtered = filtered.loc[filtered["market"].isin(selected_markets)]
+    if selected_exchanges:
+        filtered = filtered.loc[filtered["exchange"].isin(selected_exchanges)]
+    if selected_sectors:
+        filtered = filtered.loc[filtered["sector"].isin(selected_sectors)]
+    filtered = filtered.loc[filtered["avg_volume_20"].fillna(0.0) >= volume_floor]
+    filtered = filtered.loc[filtered["atr_percentile"].fillna(0.0) >= atr_floor]
+    filtered = filtered.loc[filtered["current_price"].between(price_range[0], price_range[1])]
+    filtered = filtered.loc[filtered["event_risk_days"].isna() | (filtered["event_risk_days"] <= event_cap)]
+
+    st.dataframe(filtered, width="stretch")
+    st.download_button("Export setups CSV", filtered.to_csv(index=False), "stopick_setups.csv", "text/csv")
 
 
 def _render_top_setups(bundle: ScanBundle | None) -> None:
@@ -227,10 +253,12 @@ def run_dashboard() -> None:
     uploaded_file = st.sidebar.file_uploader("Upload watchlist CSV or TXT", type=["csv", "txt"])
 
     uploaded_text = None
+    uploaded_frame = None
     if uploaded_file is not None:
         uploaded_text = uploaded_file.read().decode("utf-8")
         if uploaded_file.name.lower().endswith(".csv"):
-            uploaded_text = pd.read_csv(BytesIO(uploaded_text.encode("utf-8"))).iloc[:, 0].astype(str).str.cat(sep=",")
+            uploaded_frame = pd.read_csv(BytesIO(uploaded_text.encode("utf-8")))
+            uploaded_text = uploaded_frame.iloc[:, 0].astype(str).str.cat(sep=",")
 
     if st.sidebar.button("Run STOPICK scan", type="primary", width="stretch"):
         with st.spinner("Scanning both markets for high-conviction setups..."):
@@ -243,6 +271,7 @@ def run_dashboard() -> None:
                 setup_mode=setup_mode,
                 manual_watchlist=manual_watchlist,
                 uploaded_watchlist_text=uploaded_text,
+                uploaded_watchlist_frame=uploaded_frame,
                 refresh_data=refresh,
             )
 
