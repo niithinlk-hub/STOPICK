@@ -8,8 +8,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from app.alerts import build_alert_message, load_alert_state, save_alert_state, send_email, send_telegram, send_webhook, should_alert
-from app.workstation import ScanBundle, scan_market
+from stopick_app.alerts import build_alert_message, load_alert_state, save_alert_state, send_email, send_telegram, send_webhook, should_alert
+from stopick_app.workstation import ScanBundle, scan_market
 from backtest.engine import run_backtest
 from config import load_app_config
 from journal.storage import JournalStore

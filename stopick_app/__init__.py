@@ -1,0 +1,1 @@
+"""STOPICK internal application package."""

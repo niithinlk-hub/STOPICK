@@ -30,7 +30,7 @@ STOPICK/
 ├── .env.example
 ├── .streamlit/
 │   └── secrets.toml.example
-├── app/
+├── stopick_app/
 │   ├── alerts.py
 │   └── workstation.py
 ├── backtest/
