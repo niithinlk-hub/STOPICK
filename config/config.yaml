@@ -75,5 +75,7 @@ scoring_profiles:
 alerts: {}
 
 universe_files:
+  nse_default: config/watchlist_nse_top250.txt
+  us_default: config/watchlist_us_top250.txt
   nse_sample: config/watchlist_nse_sample.txt
   us_sample: config/watchlist_us_sample.txt

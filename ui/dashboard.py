@@ -15,6 +15,16 @@ from config import load_app_config
 from journal.storage import JournalStore
 
 
+def _watchlist_preview(path: Path, limit: int = 25) -> tuple[int, str]:
+    if not path.exists():
+        return 0, ""
+    lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    preview = "\n".join(lines[:limit])
+    if len(lines) > limit:
+        preview = f"{preview}\n..."
+    return len(lines), preview
+
+
 def _setup_to_dict_map(bundle: ScanBundle) -> dict[str, object]:
     return {f"{setup.ticker}|{setup.setup_family}": setup for setup in bundle.setups}
 
@@ -191,11 +201,22 @@ def _render_journal(config) -> None:
 
 def _render_watchlist(config) -> None:
     st.subheader("Watchlist")
-    nse_text = (config.project_root / "config" / "watchlist_nse_sample.txt").read_text(encoding="utf-8")
-    us_text = (config.project_root / "config" / "watchlist_us_sample.txt").read_text(encoding="utf-8")
+    nse_default_count, nse_default_preview = _watchlist_preview(config.universe_files["nse_default"])
+    us_default_count, us_default_preview = _watchlist_preview(config.universe_files["us_default"])
+    nse_sample_count, nse_sample_preview = _watchlist_preview(config.universe_files["nse_sample"])
+    us_sample_count, us_sample_preview = _watchlist_preview(config.universe_files["us_sample"])
+
     col1, col2 = st.columns(2)
-    col1.text_area("NSE sample watchlist", nse_text, height=300)
-    col2.text_area("US sample watchlist", us_text, height=300)
+    with col1:
+        st.metric("NSE default universe", nse_default_count)
+        st.text_area("NSE default 250 preview", nse_default_preview, height=260)
+        st.caption(f"NSE quick sample: {nse_sample_count} tickers")
+        st.text_area("NSE sample 15 preview", nse_sample_preview, height=180)
+    with col2:
+        st.metric("US default universe", us_default_count)
+        st.text_area("US default 250 preview", us_default_preview, height=260)
+        st.caption(f"US quick sample: {us_sample_count} tickers")
+        st.text_area("US sample 15 preview", us_sample_preview, height=180)
 
 
 def _render_alerts(bundle: ScanBundle | None, config) -> None:
@@ -266,7 +287,20 @@ def run_dashboard() -> None:
 
     st.sidebar.subheader("Scan controls")
     country = st.sidebar.selectbox("Country", ["BOTH", "NSE", "US"])
-    source = st.sidebar.selectbox("Watchlist source", ["sample", "manual"])
+    source = st.sidebar.selectbox(
+        "Watchlist source",
+        ["default_250", "sample", "manual"],
+        index=0,
+        format_func=lambda value: {
+            "default_250": "Default 250 universe",
+            "sample": "Quick sample (15)",
+            "manual": "Manual / upload",
+        }[value],
+    )
+    if source == "default_250":
+        st.sidebar.caption("Scans up to 250 names. When `BOTH` is selected, the limit is balanced across NSE and US.")
+    elif source == "sample":
+        st.sidebar.caption("Scans the small built-in sample watchlists for quick smoke tests.")
     timeframe = st.sidebar.selectbox("Timeframe", ["1d", "4h", "1h", "15m"])
     setup_mode = st.sidebar.selectbox("Setup type", ["both", "breakout", "pullback"])
     min_score = st.sidebar.slider(

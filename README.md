@@ -4,7 +4,7 @@ STOPICK is a modular Python + Streamlit trading workstation for identifying only
 
 ## What It Does
 
-- Scans NSE and US sample/manual watchlists
+- Scans bundled 250-name NSE and US default universes, plus quick sample/manual watchlists
 - Scores breakout and pullback setups from `0` to `100`
 - Combines trend, market structure, breakout quality, pullback quality, volume, regime, and relative strength
 - Produces execution plans with entry, stop, 1R/2R/3R targets, and position sizing
@@ -116,7 +116,7 @@ Supported secret keys:
 
 ### Scanner
 - choose `NSE`, `US`, or `BOTH`
-- choose sample or manual watchlist mode
+- choose `Default 250 universe`, `Quick sample (15)`, or `Manual / upload`
 - choose timeframe
 - choose breakout/pullback/both
 - set minimum score
@@ -291,7 +291,7 @@ pytest
 
 ## Best Validation Workflow
 
-1. Start with daily data and the sample watchlists.
+1. Start with daily data and the bundled default 250 universe, then drop to the 15-name quick sample when you want a fast smoke test.
 2. Validate the score distribution, not just the top few names.
 3. Run walk-forward tests by market and by setup family.
 4. Stress test trade ordering with Monte Carlo.

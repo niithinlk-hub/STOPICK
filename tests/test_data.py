@@ -8,7 +8,7 @@ from config import load_app_config
 from data.loaders import DataEngine
 from data.providers import BaseMarketDataProvider, YFinanceProvider
 from data.symbols import SymbolRecord, benchmark_for_market, normalize_symbol, parse_manual_watchlist
-from stopick_app.workstation import _timeframes_for_scan
+from stopick_app.workstation import _limit_records, _timeframes_for_scan
 
 
 class StubProvider(BaseMarketDataProvider):
@@ -60,3 +60,14 @@ def test_yfinance_normalizes_multiindex_history() -> None:
     assert list(normalized.columns) == ["datetime", "open", "high", "low", "close", "volume", "symbol"]
     assert normalized["symbol"].tolist() == ["AAPL", "AAPL"]
     assert normalized["close"].tolist() == [202.0, 203.0]
+
+
+def test_limit_records_balances_both_markets() -> None:
+    records = [
+        *(SymbolRecord(symbol=f"NSE{i}.NS", market="NSE", exchange="NSE") for i in range(200)),
+        *(SymbolRecord(symbol=f"US{i}", market="US", exchange="NASDAQ") for i in range(200)),
+    ]
+    limited = _limit_records(records, 250, "BOTH")
+    assert len(limited) == 250
+    assert sum(1 for record in limited if record.market == "NSE") == 125
+    assert sum(1 for record in limited if record.market == "US") == 125

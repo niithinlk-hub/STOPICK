@@ -40,6 +40,27 @@ def _timeframes_for_scan(scan_timeframe: str) -> list[str]:
     return ["1d", "4h", "1h", "15m"]
 
 
+def _limit_records(records: list[SymbolRecord], max_symbols: int, country: str) -> list[SymbolRecord]:
+    if country != "BOTH":
+        return records[:max_symbols]
+    markets = list(dict.fromkeys(record.market for record in records))
+    if len(markets) <= 1:
+        return records[:max_symbols]
+
+    per_market = max(1, max_symbols // len(markets))
+    limited: list[SymbolRecord] = []
+    leftovers: list[SymbolRecord] = []
+    for market in markets:
+        market_records = [record for record in records if record.market == market]
+        limited.extend(market_records[:per_market])
+        leftovers.extend(market_records[per_market:])
+
+    remaining = max_symbols - len(limited)
+    if remaining > 0:
+        limited.extend(leftovers[:remaining])
+    return limited[:max_symbols]
+
+
 def _records_from_source(
     config: AppConfig,
     *,
@@ -50,11 +71,18 @@ def _records_from_source(
     uploaded_watchlist_frame: pd.DataFrame | None = None,
 ) -> list[SymbolRecord]:
     records: list[SymbolRecord] = []
-    if source == "sample":
+    if source in {"default_250", "sample"}:
+        source_prefix = "default" if source == "default_250" else "sample"
         if country in {"NSE", "BOTH"}:
-            records.extend(SymbolRecord(symbol=symbol, market="NSE", exchange="NSE") for symbol in load_watchlist_file(config.universe_files["nse_sample"], "NSE"))
+            records.extend(
+                SymbolRecord(symbol=symbol, market="NSE", exchange="NSE")
+                for symbol in load_watchlist_file(config.universe_files[f"nse_{source_prefix}"], "NSE")
+            )
         if country in {"US", "BOTH"}:
-            records.extend(SymbolRecord(symbol=symbol, market="US", exchange="US") for symbol in load_watchlist_file(config.universe_files["us_sample"], "US"))
+            records.extend(
+                SymbolRecord(symbol=symbol, market="US", exchange="US")
+                for symbol in load_watchlist_file(config.universe_files[f"us_{source_prefix}"], "US")
+            )
     else:
         if uploaded_watchlist_frame is not None and not uploaded_watchlist_frame.empty:
             symbol_column = "symbol" if "symbol" in uploaded_watchlist_frame.columns else "ticker"
@@ -78,7 +106,7 @@ def _records_from_source(
         for market in (["NSE", "US"] if country == "BOTH" else [country]):
             records.extend(SymbolRecord(symbol=symbol, market=market, exchange=market) for symbol in parse_manual_watchlist(text, market))
     unique: dict[str, SymbolRecord] = {record.symbol: record for record in records}
-    return list(unique.values())[: config.runtime.max_symbols_per_scan]
+    return _limit_records(list(unique.values()), config.runtime.max_symbols_per_scan, country)
 
 
 def _event_map(data_engine: DataEngine, records: list[SymbolRecord]) -> tuple[dict[str, int | None], list[str]]:
