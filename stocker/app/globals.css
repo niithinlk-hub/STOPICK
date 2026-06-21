@@ -1,0 +1,157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Core surfaces — deep navy trading terminal */
+  --bg: 8 12 20;
+  --surface: 14 20 31;
+  --elevated: 21 29 43;
+  --overlay: 28 38 54;
+  --border: 36 48 67;
+  --border-strong: 54 70 94;
+
+  /* Text */
+  --text: 230 237 245;
+  --muted: 148 163 190;
+  --faint: 100 116 145;
+
+  /* Brand — professional blue → emerald-teal (Stocker Analytics) */
+  --brand: 56 132 255;
+  --brand-2: 45 212 160;
+
+  /* Subtle hover / zebra overlays (theme-aware, replace bg-white/[0.0x]) */
+  --hover: 56 132 255;
+  --zebra: 148 163 190;
+
+  /* Semantic */
+  --bull: 52 211 153;
+  --bear: 248 113 113;
+  --warn: 251 191 36;
+  --info: 56 189 248;
+
+  /* Theme-aware shadows (overridden in light). */
+  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 8px 24px -12px rgb(0 0 0 / 0.6);
+  --shadow-pop: 0 20px 50px -20px rgb(0 0 0 / 0.8);
+
+  color-scheme: dark;
+}
+
+/* ----------------------------- Light theme ------------------------------ */
+html.light {
+  --bg: 245 248 252;          /* cool near-white canvas */
+  --surface: 255 255 255;     /* white cards */
+  --elevated: 248 250 253;    /* slate-50 */
+  --overlay: 240 245 250;     /* slate-100 */
+  --border: 224 231 240;      /* slate-200 */
+  --border-strong: 200 211 226; /* slate-300 */
+
+  --text: 17 25 45;           /* deep navy-slate */
+  --muted: 67 82 110;         /* slate-600 */
+  --faint: 140 155 178;       /* slate-400 */
+
+  --brand: 37 99 235;         /* blue-600 */
+  --brand-2: 5 150 105;       /* emerald-600 */
+
+  --hover: 37 99 235;         /* blue-600 */
+  --zebra: 15 23 42;          /* slate-900 (very low alpha) */
+
+  --bull: 22 163 74;          /* green-600 */
+  --bear: 220 38 38;          /* red-600 */
+  --warn: 217 119 6;          /* amber-600 */
+  --info: 2 132 199;          /* sky-600 */
+
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.05), 0 10px 24px -16px rgb(15 23 42 / 0.20);
+  --shadow-pop: 0 20px 50px -20px rgb(15 23 42 / 0.28);
+
+  color-scheme: light;
+}
+
+* {
+  border-color: rgb(var(--border));
+}
+
+html,
+body {
+  background-color: rgb(var(--bg));
+  color: rgb(var(--text));
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-feature-settings: "cv01", "ss01";
+}
+
+/* Tabular figures everywhere numbers matter (prices, scores, columns). */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Token-based row interactions — visible in BOTH light and dark (unlike bg-white/x). */
+.row-hover {
+  transition: background-color 150ms ease;
+}
+.row-hover:hover {
+  background-color: rgb(var(--hover) / 0.06);
+}
+.row-zebra:nth-child(even) {
+  background-color: rgb(var(--zebra) / 0.035);
+}
+
+/* Subtle gridline background for the app shell. */
+.app-grid-bg {
+  background-image:
+    radial-gradient(circle at 100% 0%, rgb(var(--brand) / 0.06), transparent 40%),
+    radial-gradient(circle at 0% 100%, rgb(var(--brand-2) / 0.05), transparent 40%);
+}
+
+/* Thin custom scrollbars to keep data-dense panes clean. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--border-strong) / 0.6);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--faint) / 0.8);
+  background-clip: padding-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Skeleton shimmer */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgb(var(--elevated));
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(var(--overlay) / 0.6),
+    transparent
+  );
+  animation: shimmer 1.6s infinite;
+}
