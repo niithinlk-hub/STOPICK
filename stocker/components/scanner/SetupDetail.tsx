@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, Check, ExternalLink, IndianRupee, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, Check, ExternalLink, RefreshCw, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fmtNumber, fmtPct, fmtPrice } from "@/lib/format";
 import { getSymbolDetail } from "@/lib/client/api";
 import { tradingViewUrl } from "@/lib/tradingview";
-import { dhanTradeUrl } from "@/lib/dhanLink";
 import {
   Badge,
   Button,
@@ -144,30 +143,16 @@ export function SetupDetail({ setup, onClose }: { setup: SetupSignal; onClose?: 
               </Badge>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <a
-              href={tradingViewUrl(setup.ticker, setup.market, setup.exchange)}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={`Open ${setup.ticker} on TradingView`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-elevated/60 px-2.5 py-1 text-xs font-medium text-text transition-colors hover:bg-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
-            >
-              TradingView
-              <ExternalLink className="h-3.5 w-3.5 text-brand" strokeWidth={2} />
-            </a>
-            {dhanTradeUrl(setup.ticker, setup.market) && (
-              <a
-                href={dhanTradeUrl(setup.ticker, setup.market)!}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={`Trade ${setup.ticker} on Dhan`}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-bull/40 bg-bull/10 px-2.5 py-1 text-xs font-semibold text-bull transition-colors hover:bg-bull/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bull/60"
-              >
-                <IndianRupee className="h-3.5 w-3.5" strokeWidth={2.2} />
-                Trade on Dhan
-              </a>
-            )}
-          </div>
+          <a
+            href={tradingViewUrl(setup.ticker, setup.market, setup.exchange)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Open ${setup.ticker} on TradingView — connect Dhan as broker there to trade`}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-elevated/60 px-2.5 py-1 text-xs font-medium text-text transition-colors hover:bg-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+          >
+            TradingView
+            <ExternalLink className="h-3.5 w-3.5 text-brand" strokeWidth={2} />
+          </a>
         </CardHeader>
         <CardBody>
           {loading ? (
