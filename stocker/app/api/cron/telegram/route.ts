@@ -12,6 +12,6 @@ export const maxDuration = 60;
  */
 export async function GET(req: Request) {
   if (!cronAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const result = await sendSetupDigest({ provisional: false });
+  const result = await sendSetupDigest({ provisional: false, origin: new URL(req.url).origin });
   return NextResponse.json(result);
 }

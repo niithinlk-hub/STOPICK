@@ -73,6 +73,7 @@ const SOURCE_OPTS: SegOption<UniverseSource>[] = [
   { value: "sample", label: "Sample 15" },
   { value: "tier_1", label: "Set 1 · 500" },
   { value: "tier_2", label: "Set 2 · 500" },
+  { value: "tier_3", label: "Set 3" },
   { value: "manual", label: "Manual" },
 ];
 
@@ -106,12 +107,6 @@ export function ScanControls({
   const set = <K extends keyof ScanParams>(key: K, value: ScanParams[K]) =>
     onChange({ ...params, [key]: value });
 
-  // tier_3 is an NSE-only breadth set — only offer it when NSE is in scope.
-  const sourceOpts: SegOption<UniverseSource>[] =
-    params.country === "US"
-      ? SOURCE_OPTS
-      : [...SOURCE_OPTS.slice(0, 3), { value: "tier_3", label: "Set 3 · NSE" }, ...SOURCE_OPTS.slice(3)];
-
   return (
     <Card>
       <CardHeader>
@@ -128,7 +123,7 @@ export function ScanControls({
         <Segmented
           label="Universe Source"
           value={params.source}
-          options={sourceOpts}
+          options={SOURCE_OPTS}
           onChange={(v) => set("source", v)}
           disabled={loading}
         />

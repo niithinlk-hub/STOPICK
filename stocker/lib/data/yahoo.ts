@@ -7,6 +7,7 @@
 import "server-only";
 import type { Bar, Timeframe } from "../engine/types";
 import { cacheGet, cacheSet } from "./cache";
+import { dhanEnabled, dhanSecurityId, fetchDhanOhlcv } from "./dhan";
 
 const HEADERS = {
   "User-Agent":
@@ -127,6 +128,19 @@ export async function fetchOhlcv(symbol: string, tf: Timeframe, lookbackBars = 4
   const cacheKey = `ohlcv|${symbol}|${tf}|${lookbackBars}`;
   const cached = cacheGet<Bar[]>(cacheKey);
   if (cached) return cached;
+
+  // NSE equities → Dhan when enabled + mapped; fall through to Yahoo on empty/failure
+  // (e.g. unmapped ticker or expired token). US + indices always use Yahoo.
+  if (symbol.endsWith(".NS") && dhanEnabled()) {
+    const securityId = dhanSecurityId(symbol.slice(0, -3));
+    if (securityId) {
+      const dhanBars = await fetchDhanOhlcv(securityId, tf, lookbackBars);
+      if (dhanBars.length) {
+        cacheSet(cacheKey, dhanBars);
+        return dhanBars;
+      }
+    }
+  }
 
   const interval = providerInterval(tf);
   const period1 = startSeconds(tf, lookbackBars);

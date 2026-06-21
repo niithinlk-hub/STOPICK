@@ -9,6 +9,8 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { SignInNotice } from "@/components/auth/SignInNotice";
 import { BiometricEnroll } from "@/components/auth/BiometricEnroll";
 import { UserManagement } from "@/components/admin/UserManagement";
+import { TelegramSettings } from "@/components/admin/TelegramSettings";
+import { DhanSettings } from "@/components/admin/DhanSettings";
 
 const DEFAULT_BASE = "https://generativelanguage.googleapis.com/v1beta/openai";
 const DEFAULT_MODEL = "gemini-2.0-flash";
@@ -226,6 +228,10 @@ export function AdminSettingsClient() {
             </form>
           </CardBody>
         </Card>
+
+        <DhanSettings />
+
+        <TelegramSettings />
 
         <BiometricEnroll />
 
