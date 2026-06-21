@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sendSetupDigest } from "@/lib/server/digest";
 import { sendTelegram } from "@/lib/telegram";
 import { getTelegramSettings } from "@/lib/server/telegramSettings";
-import { storeDhanToken } from "@/lib/server/dhanToken";
+import { storeDhanToken, refreshDhanToken } from "@/lib/server/dhanToken";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +13,7 @@ const HELP =
   "/run — scan all your selected sets now and send the digest\n" +
   "/preclose — provisional pre-close scan (candle still forming)\n" +
   "/access <token> — update the Dhan NSE data token (expires ~daily)\n" +
+  "/refresh — mint a fresh Dhan token now (needs TOTP auto-refresh configured)\n" +
   "/help — this message\n\n" +
   "Auto: pre-close ~3 PM IST, confirmed EOD ~4 PM IST (Mon–Fri). Configure sets, score and toggles in the app → Settings → Telegram.";
 
@@ -66,6 +67,13 @@ export async function POST(req: Request) {
           chatId,
         );
       }
+    } else if (cmd === "/refresh") {
+      await sendTelegram("⏳ Minting a fresh Dhan token…", chatId);
+      const r = await refreshDhanToken();
+      await sendTelegram(
+        r.ok ? `✅ Fresh Dhan token minted — expires ${new Date((r.exp ?? 0) * 1000).toUTCString()}.` : `⚠️ ${r.error}`,
+        chatId,
+      );
     } else if (cmd === "/help" || cmd === "/start") {
       await sendTelegram(HELP, chatId);
     }
