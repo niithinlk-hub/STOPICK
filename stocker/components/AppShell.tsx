@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   BarChart3,
+  Briefcase,
   Coins,
   Gauge,
   GitMerge,
@@ -35,6 +36,7 @@ const NAV = [
   { href: "/backtest", label: "Backtest", icon: BarChart3 },
   { href: "/watchlist", label: "Watchlist", icon: Star },
   { href: "/paper", label: "Paper Trades", icon: Wallet },
+  { href: "/trade", label: "Trade", icon: Briefcase },
   { href: "/admin", label: "Settings", icon: Settings },
 ];
 

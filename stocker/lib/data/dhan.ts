@@ -132,6 +132,23 @@ async function dhanPost<T>(path: string, body: Record<string, unknown>): Promise
   }
 }
 
+/** GET a Dhan v2 endpoint behind the rate gate (read-only portfolio APIs — no IP needed). */
+export async function dhanGet<T>(path: string): Promise<T | null> {
+  const token = await getDhanToken();
+  if (!token) return null;
+  await rateGate();
+  try {
+    const res = await fetch(`${ROOT}/${path}`, {
+      headers: { "access-token": token, Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchDhanOhlcv(securityId: string, tf: Timeframe, lookbackBars = 400): Promise<Bar[]> {
   const now = Date.now();
   const seg = { securityId, exchangeSegment: "NSE_EQ", instrument: "EQUITY" };
