@@ -21,9 +21,10 @@ export async function GET(req: Request) {
   const source = (u.searchParams.get("source") || "tier_1") as UniverseSource;
   const minScore = Number(u.searchParams.get("minScore") ?? 75);
   const limit = Number(u.searchParams.get("limit") ?? 600);
+  const live = u.searchParams.get("live") === "1";
 
   try {
-    const r = await runScan({ country: market, source, timeframe: "1d", setupMode: "both", minScore, limit });
+    const r = await runScan({ country: market, source, timeframe: "1d", setupMode: "both", minScore, limit, live });
     return NextResponse.json({
       market,
       source,

@@ -14,6 +14,7 @@ const HELP =
   "/preclose — provisional pre-close scan (candle still forming)\n" +
   "/access <token> — update the Dhan NSE data token (expires ~daily)\n" +
   "/refresh — mint a fresh Dhan token now (needs TOTP auto-refresh configured)\n" +
+  "/refreshmap — rebuild the NSE ticker→securityId map from Dhan's scrip master\n" +
   "/help — this message\n\n" +
   "Auto: pre-close ~3 PM IST, confirmed EOD ~4 PM IST (Mon–Fri). Configure sets, score and toggles in the app → Settings → Telegram.";
 
@@ -74,6 +75,15 @@ export async function POST(req: Request) {
         r.ok ? `✅ Fresh Dhan token minted — expires ${new Date((r.exp ?? 0) * 1000).toUTCString()}.` : `⚠️ ${r.error}`,
         chatId,
       );
+    } else if (cmd === "/refreshmap") {
+      await sendTelegram("⏳ Rebuilding NSE scrip map from Dhan…", chatId);
+      const secret = process.env.CRON_SECRET;
+      const r = await fetch(`${origin}/api/cron/refresh-scrip`, {
+        headers: secret ? { authorization: `Bearer ${secret}` } : undefined,
+        cache: "no-store",
+      });
+      const j = (await r.json().catch(() => ({}))) as { count?: number; error?: string };
+      await sendTelegram(r.ok ? `✅ Scrip map rebuilt — ${j.count} NSE names mapped.` : `⚠️ ${j.error ?? "failed"}`, chatId);
     } else if (cmd === "/help" || cmd === "/start") {
       await sendTelegram(HELP, chatId);
     }

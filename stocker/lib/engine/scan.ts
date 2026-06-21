@@ -16,6 +16,7 @@ import type {
 } from "./types";
 import { CONFIG } from "../config";
 import { fetchEventDays, fetchOhlcv } from "../data/yahoo";
+import { dhanEnabled, dhanSecurityId, ensureScripMap, fetchDhanQuotes, isCircuitLocked, type DhanQuote } from "../data/dhan";
 import { mapWithConcurrency } from "../data/cache";
 import { resolveRecords } from "../data/universe";
 import { analyzeTrendAlignment } from "./trend";
@@ -30,6 +31,31 @@ import { detectChartPattern } from "./chartPatterns";
 import { buildExecutionPlan } from "./risk";
 import { atr, last, rollingPercentile, round } from "./indicators";
 import type { Market } from "./types";
+
+/** IST calendar date (YYYY-MM-DD) for an epoch-ms instant — for matching trading days. */
+function istDate(ms: number): string {
+  return new Date(ms).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+/**
+ * Append/replace today's daily bar with a live Dhan quote so pre-close scans reflect the
+ * forming candle instead of yesterday's close. Replaces the last bar if it's already
+ * today's (IST), else appends a new one.
+ */
+function injectLiveBar(daily: Bar[], q: DhanQuote): Bar[] {
+  if (!daily.length || !q.lastPrice) return daily;
+  const lastBar = daily[daily.length - 1];
+  const sameDay = istDate(lastBar.time * 1000) === istDate(Date.now());
+  const live: Bar = {
+    time: sameDay ? lastBar.time : lastBar.time + 86400,
+    open: q.open || lastBar.close,
+    high: Math.max(q.high || q.lastPrice, q.lastPrice),
+    low: Math.min(q.low || q.lastPrice, q.lastPrice || lastBar.close),
+    close: q.lastPrice,
+    volume: q.volume || 0,
+  };
+  return sameDay ? [...daily.slice(0, -1), live] : [...daily, live];
+}
 
 function timeframesForScan(tf: Timeframe): Timeframe[] {
   if (tf === "1d") return ["1d"];
@@ -56,6 +82,7 @@ export async function analyzeSymbol(
   timeframe: Timeframe,
   family: SetupFamily = "breakout",
 ): Promise<{ bars: Bar[]; setup: SetupSignal | null }> {
+  if (dhanEnabled()) await ensureScripMap();
   const display = symbol.endsWith(".NS") ? symbol.slice(0, -3) : symbol;
   const tfs = timeframesForScan(timeframe);
   const frameMap: Record<string, Bar[]> = {};
@@ -130,6 +157,7 @@ export async function analyzeSymbol(
 
 export async function runScan(params: ScanParams): Promise<ScanResponse> {
   const startedAt = Date.now();
+  if (dhanEnabled()) await ensureScripMap();
   const records = resolveRecords({
     country: params.country,
     source: params.source,
@@ -166,14 +194,44 @@ export async function runScan(params: ScanParams): Promise<ScanResponse> {
     );
   }
 
+  // Live NSE snapshot (one batched Dhan call): powers the pre-close forming candle, the
+  // circuit-lock flag, and a pre-filter that skips dead/untraded tickers before charts.
+  const sidByDisplay = new Map<string, string>();
+  if (dhanEnabled()) {
+    for (const r of records) {
+      if (r.market !== "NSE") continue;
+      const sid = dhanSecurityId(r.display);
+      if (sid) sidByDisplay.set(r.display, sid);
+    }
+  }
+  const quotesBySid = sidByDisplay.size ? await fetchDhanQuotes([...sidByDisplay.values()]) : new Map<string, DhanQuote>();
+  // Trust the pre-filter only if the batch came back reasonably complete.
+  const quoteCoverageOk = sidByDisplay.size > 0 && quotesBySid.size >= sidByDisplay.size * 0.5;
+  const quoteFor = (display: string): DhanQuote | undefined => {
+    const sid = sidByDisplay.get(display);
+    return sid ? quotesBySid.get(sid) : undefined;
+  };
+
   const setups: SetupSignal[] = [];
 
   await mapWithConcurrency(records, 8, async (record) => {
     try {
+      const quote = record.market === "NSE" ? quoteFor(record.display) : undefined;
+      // Pre-filter: mapped NSE name with no live quote (and the batch was healthy) is not
+      // trading today — skip the chart fetch it would only fail on.
+      if (record.market === "NSE" && quoteCoverageOk && sidByDisplay.has(record.display) && !quote) {
+        failures[record.symbol] = "not_trading";
+        return;
+      }
+
       const frameMap: Record<string, Bar[]> = {};
       for (const tf of tfs) {
         if (tf === "15m" && params.timeframe !== "15m") continue;
         frameMap[tf] = await fetchOhlcv(record.symbol, tf, 400);
+      }
+      // Pre-close: graft the live forming candle onto the daily frame (NSE + Dhan only).
+      if (params.live && quote && frameMap["1d"]?.length) {
+        frameMap["1d"] = injectLiveBar(frameMap["1d"], quote);
       }
       let scanFrame = frameMap[params.timeframe];
       if (!scanFrame || !scanFrame.length) scanFrame = frameMap["1d"];
@@ -181,6 +239,8 @@ export async function runScan(params: ScanParams): Promise<ScanResponse> {
         failures[record.symbol] = "No scan frame data.";
         return;
       }
+
+      const circuit = quote ? isCircuitLocked(quote) : null;
 
       const benchSym = benchmarkSymbol(record.market);
       const benchBars = benchmarkFrames[benchSym] ?? [];
@@ -257,7 +317,11 @@ export async function runScan(params: ScanParams): Promise<ScanResponse> {
               : "Participation is acceptable but not exceptional.",
             momentum.explanation,
           ],
-          reasonsAgainst: [...volume.penaltyFlags, ...(liquidity.tradable ? [] : ["below_liquidity_floor"])],
+          reasonsAgainst: [
+            ...volume.penaltyFlags,
+            ...(liquidity.tradable ? [] : ["below_liquidity_floor"]),
+            ...(circuit ? [`circuit_locked_${circuit}`] : []),
+          ],
           executionPlan: null,
           riskWarnings: [],
           eventRiskDays: eventDays[record.display] ?? null,

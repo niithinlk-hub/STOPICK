@@ -57,7 +57,9 @@ export async function sendSetupDigest(opts: {
   const results = await Promise.all(
     sets.map(async (set) => {
       const [market, source] = set.split(":");
-      const url = `${origin}/api/cron/scan-set?market=${market}&source=${source}&minScore=${minScore}&limit=${setLimit}`;
+      const url =
+        `${origin}/api/cron/scan-set?market=${market}&source=${source}&minScore=${minScore}&limit=${setLimit}` +
+        (provisional ? "&live=1" : "");
       try {
         const r = await fetch(url, { headers, cache: "no-store" });
         if (!r.ok) return { set, rows: [] as ScanRow[], scanned: 0 };

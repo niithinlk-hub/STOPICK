@@ -274,6 +274,8 @@ export interface ScanParams {
   minScore: number;
   manualSymbols?: string;
   limit?: number;
+  /** Inject a live forming daily candle from Dhan quotes (pre-close runs). NSE only. */
+  live?: boolean;
 }
 
 export interface ScanRow {
