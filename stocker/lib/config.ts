@@ -15,7 +15,10 @@ export const CONFIG: AppConfig = {
     brokerageBps: 3,
     taxesBps: 2,
     minTurnoverUsd: 5_000_000,
-    minTurnoverInr: 50_000_000,
+    // ₹50 lakh/day hard floor — excludes only untradeable junk. Genuine ₹1000cr+
+    // midcaps trade ₹1–4cr/day and must qualify; the liquidity *score* (log-scaled)
+    // ranks thinner names lower without removing them. Override with MIN_TURNOVER_INR.
+    minTurnoverInr: 5_000_000,
   },
   benchmarkMap: {
     NSE: { broad: "^NSEI", broad_alt: "^CRSLDX", bank: "^NSEBANK", tech: "^CNXIT" },
