@@ -53,20 +53,26 @@ export function dhanSecurityId(displaySymbol: string): string | null {
   return m[displaySymbol] ?? m[displaySymbol.toUpperCase()] ?? null;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-// Global rate gate: serialize Dhan calls to ≥210ms apart (~4.7/sec, under the 5/sec
-// cap). Race-free via a promise chain so concurrent scan workers can't burst past it.
-let gateChain: Promise<void> = Promise.resolve();
-let lastCallAt = 0;
-function rateGate(minIntervalMs = 210): Promise<void> {
-  const next = gateChain.then(async () => {
-    const wait = lastCallAt + minIntervalMs - Date.now();
-    if (wait > 0) await sleep(wait);
-    lastCallAt = Date.now();
-  });
-  gateChain = next.catch(() => {});
-  return next;
+// Lightweight concurrency cap on in-flight Dhan calls. Keeps the scan parallel (fast)
+// while bounding bursts so we don't fling hundreds of requests at once. Tunable via
+// DHAN_MAX_CONCURRENCY. NOT a hard 5/sec serializer — that made big scans ~4x slower for
+// no real gain (the "empties" it chased were the liquidity floor, not throttling); any
+// occasional 429 simply falls back to Yahoo.
+const MAX_INFLIGHT = Math.max(1, Number(process.env.DHAN_MAX_CONCURRENCY) || 8);
+let inflight = 0;
+const waiters: Array<() => void> = [];
+async function acquire(): Promise<void> {
+  if (inflight < MAX_INFLIGHT) {
+    inflight++;
+    return;
+  }
+  // Wait for a slot; release() hands this waiter the slot directly (no re-increment).
+  await new Promise<void>((res) => waiters.push(res));
+}
+function release(): void {
+  const next = waiters.shift();
+  if (next) next();
+  else inflight--;
 }
 
 const ymd = (ms: number) => new Date(ms).toISOString().slice(0, 10);
@@ -113,11 +119,11 @@ function resample4h(bars: Bar[]): Bar[] {
   return order.map((k) => buckets.get(k)!);
 }
 
-/** POST to a Dhan v2 endpoint behind the rate gate. Returns parsed JSON or null. */
+/** POST to a Dhan v2 endpoint (concurrency-capped). Returns parsed JSON or null. */
 async function dhanPost<T>(path: string, body: Record<string, unknown>): Promise<T | null> {
   const token = await getDhanToken();
   if (!token) return null;
-  await rateGate();
+  await acquire();
   try {
     const res = await fetch(`${ROOT}/${path}`, {
       method: "POST",
@@ -129,14 +135,16 @@ async function dhanPost<T>(path: string, body: Record<string, unknown>): Promise
     return (await res.json()) as T;
   } catch {
     return null;
+  } finally {
+    release();
   }
 }
 
-/** GET a Dhan v2 endpoint behind the rate gate (read-only portfolio APIs — no IP needed). */
+/** GET a Dhan v2 endpoint (concurrency-capped; read-only portfolio APIs — no IP needed). */
 export async function dhanGet<T>(path: string): Promise<T | null> {
   const token = await getDhanToken();
   if (!token) return null;
-  await rateGate();
+  await acquire();
   try {
     const res = await fetch(`${ROOT}/${path}`, {
       headers: { "access-token": token, Accept: "application/json" },
@@ -146,6 +154,8 @@ export async function dhanGet<T>(path: string): Promise<T | null> {
     return (await res.json()) as T;
   } catch {
     return null;
+  } finally {
+    release();
   }
 }
 

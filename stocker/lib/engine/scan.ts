@@ -194,8 +194,9 @@ export async function runScan(params: ScanParams): Promise<ScanResponse> {
     );
   }
 
-  // Live NSE snapshot (one batched Dhan call): powers the pre-close forming candle, the
-  // circuit-lock flag, and a pre-filter that skips dead/untraded tickers before charts.
+  // Live NSE snapshot (one batched Dhan call): powers the pre-close forming candle and the
+  // circuit-lock flag. NOT used to pre-filter — a missing quote (e.g. after hours) must
+  // never drop a tradable name; the chart fetch is the source of truth for "has data".
   const sidByDisplay = new Map<string, string>();
   if (dhanEnabled()) {
     for (const r of records) {
@@ -205,8 +206,6 @@ export async function runScan(params: ScanParams): Promise<ScanResponse> {
     }
   }
   const quotesBySid = sidByDisplay.size ? await fetchDhanQuotes([...sidByDisplay.values()]) : new Map<string, DhanQuote>();
-  // Trust the pre-filter only if the batch came back reasonably complete.
-  const quoteCoverageOk = sidByDisplay.size > 0 && quotesBySid.size >= sidByDisplay.size * 0.5;
   const quoteFor = (display: string): DhanQuote | undefined => {
     const sid = sidByDisplay.get(display);
     return sid ? quotesBySid.get(sid) : undefined;
@@ -217,13 +216,6 @@ export async function runScan(params: ScanParams): Promise<ScanResponse> {
   await mapWithConcurrency(records, 8, async (record) => {
     try {
       const quote = record.market === "NSE" ? quoteFor(record.display) : undefined;
-      // Pre-filter: mapped NSE name with no live quote (and the batch was healthy) is not
-      // trading today — skip the chart fetch it would only fail on.
-      if (record.market === "NSE" && quoteCoverageOk && sidByDisplay.has(record.display) && !quote) {
-        failures[record.symbol] = "not_trading";
-        return;
-      }
-
       const frameMap: Record<string, Bar[]> = {};
       for (const tf of tfs) {
         if (tf === "15m" && params.timeframe !== "15m") continue;
