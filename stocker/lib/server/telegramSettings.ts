@@ -21,7 +21,7 @@ function defaults(): TelegramSettings {
     enabled: true,
     chatId: process.env.TELEGRAM_CHAT_ID ?? null,
     sets: (process.env.TELEGRAM_SETS || ALL_SETS.join(",")).split(",").map((s) => s.trim()).filter(Boolean),
-    minScore: Number(process.env.TELEGRAM_MIN_SCORE ?? 75),
+    minScore: Number(process.env.TELEGRAM_MIN_SCORE ?? 80),
     topN: Number(process.env.TELEGRAM_TOP_N ?? 40),
     preclose: true,
     intradayEnabled: true,
