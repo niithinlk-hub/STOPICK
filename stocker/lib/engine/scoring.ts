@@ -56,7 +56,10 @@ export function scoreSetup(setup: SetupSignal, profile: ScoringProfile): ScoreRe
     pullback_quality: bounded(pullbackComponent),
     volume_confirmation: bounded(volumeComponent - volPenalty),
     momentum: bounded((momentum?.score ?? 50) / 100),
-    volatility_regime: regime && (regime.volatilityState === "compressed" || regime.volatilityState === "normal") ? 0.8 : 0.45,
+    // Per-symbol volatility: reward a breakout from a quiet/normal base, penalise one
+    // firing when the stock's own ATR is already in a blow-off percentile. (Previously this
+    // read the INDEX regime and ignored the symbol's atrPercentile entirely.)
+    volatility_regime: setup.atrPercentile <= 70 ? 0.85 : setup.atrPercentile <= 90 ? 0.55 : 0.3,
     relative_strength: bounded((rs?.score ?? 0) / 100),
     liquidity: bounded((liquidity?.score ?? 50) / 100),
     htf_headroom: headroom,

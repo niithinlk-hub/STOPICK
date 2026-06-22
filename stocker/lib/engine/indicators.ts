@@ -59,7 +59,12 @@ export function sma(values: number[], period: number): number[] {
     const x = values[i];
     window.push(x);
     sum += Number.isFinite(x) ? x : 0;
-    if (window.length > period) sum -= Number.isFinite(window.shift()!) ? (window as number[])[0] : 0;
+    if (window.length > period) {
+      // Subtract the value LEAVING the window. shift() returns it; must capture it before
+      // reading — reading window[0] after shift() would grab the new front (still in window).
+      const removed = window.shift()!;
+      sum -= Number.isFinite(removed) ? removed : 0;
+    }
     if (window.length >= period) out[i] = sum / period;
   }
   return out;

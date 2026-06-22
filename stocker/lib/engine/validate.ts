@@ -20,7 +20,7 @@ import { analyzeMarketRegime, analyzeRelativeStrength, analyzeVolumeParticipatio
 import { scoreSetup } from "./scoring";
 import { detectChartPattern } from "./chartPatterns";
 import { buildExecutionPlan } from "./risk";
-import { atr, last, round } from "./indicators";
+import { atr, last, rollingPercentile, round } from "./indicators";
 
 export interface GradeBucket {
   grade: string;
@@ -112,7 +112,7 @@ function analyzeAt(
     executionPlan: null,
     riskWarnings: [],
     eventRiskDays: null,
-    atrPercentile: 0,
+    atrPercentile: frame.length >= 30 ? round(last(rollingPercentile(atr(frame, 14), 252), 0) * 100, 2) : 0,
   };
   setup.executionPlan = buildExecutionPlan(setup, { capitalBase: CONFIG.runtime.capitalBase, riskPerTradePct: CONFIG.runtime.riskPerTradePct });
   const scored = scoreSetup(setup, profile);

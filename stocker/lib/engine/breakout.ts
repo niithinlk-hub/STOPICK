@@ -44,7 +44,9 @@ function distancePct(current: number, level: number | null): number | null {
 }
 
 function overheadResistancePct(bars: Bar[], current: number): number | null {
-  const window = bars.slice(-252).map((b) => b.high);
+  // Exclude the decision bar itself — otherwise a fresh new-high breakout sees its own
+  // high as "overhead resistance" and self-rejects.
+  const window = bars.slice(0, -1).slice(-252).map((b) => b.high);
   if (!window.length) return null;
   const overhead = Math.max(...window);
   if (overhead <= current) return null;
