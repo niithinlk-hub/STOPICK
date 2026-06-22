@@ -143,9 +143,10 @@ export function validateEngine(
   items: { symbol: string; bars: Bar[] }[],
   bench: Bar[],
   market: Market,
-  opts: { horizonBars?: number; profileOverride?: ScoringProfile } = {},
+  opts: { horizonBars?: number; profileOverride?: ScoringProfile; targetR?: number; stopAtrMult?: number } = {},
 ): ValidateResult {
   const horizon = opts.horizonBars ?? 10;
+  const targetR = opts.targetR ?? 2;
   const profile = opts.profileOverride ?? CONFIG.scoringProfiles.bullish_breakout;
   const benchSym = CONFIG.benchmarkMap[market]?.broad ?? (market === "NSE" ? "^NSEI" : "SPY");
   const trades: RawTrade[] = [];
@@ -170,8 +171,8 @@ export function validateEngine(
       const entryIdx = t + 1;
       const entry = bars[entryIdx].open;
       const a = Number.isFinite(last(atr(frame, 14))) ? last(atr(frame, 14)) : entry * 0.03;
-      const stop = res.stop < entry ? res.stop : entry - a * 1.5;
-      const target = res.target > entry ? res.target : entry + (entry - stop) * 2;
+      const stop = opts.stopAtrMult ? entry - a * opts.stopAtrMult : res.stop < entry ? res.stop : entry - a * 1.5;
+      const target = entry + (entry - stop) * targetR;
       const lastIdx = Math.min(bars.length - 1, entryIdx + horizon);
       let exitPrice = bars[lastIdx].close;
       let hitTarget = false;

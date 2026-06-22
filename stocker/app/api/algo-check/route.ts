@@ -41,6 +41,10 @@ export async function GET(req: Request) {
   const sample = Math.min(Number(u.searchParams.get("sample") ?? 20), 40);
   const horizon = Math.min(Number(u.searchParams.get("horizon") ?? 10), 40);
   const liqWeight = u.searchParams.get("liqWeight");
+  const targetRParam = u.searchParams.get("targetR");
+  const stopAtrParam = u.searchParams.get("stopAtr");
+  const targetR = targetRParam != null && Number.isFinite(Number(targetRParam)) ? Number(targetRParam) : undefined;
+  const stopAtrMult = stopAtrParam != null && Number.isFinite(Number(stopAtrParam)) ? Number(stopAtrParam) : undefined;
 
   if (dhanEnabled()) await ensureScripMap();
   const records = resolveRecords({ country: market, source, maxSymbols: sample }).slice(0, sample);
@@ -65,13 +69,15 @@ export async function GET(req: Request) {
     profileOverride = { ...base, weights: { ...base.weights, liquidity: Number(liqWeight) } };
   }
 
-  const result = validateEngine(items, bench, market, { horizonBars: horizon, profileOverride });
+  const result = validateEngine(items, bench, market, { horizonBars: horizon, profileOverride, targetR, stopAtrMult });
   return NextResponse.json({
     market,
     source,
     sampleRequested: sample,
     sampleWithData: items.length,
     horizon,
+    targetR: targetR ?? 2,
+    stopAtr: stopAtrMult ?? null,
     liqWeight: liqWeight != null ? Number(liqWeight) : CONFIG.scoringProfiles.bullish_breakout.weights.liquidity,
     ...result,
   });

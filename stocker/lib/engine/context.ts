@@ -87,16 +87,40 @@ export function analyzeVolumeParticipation(bars: Bar[], breakoutLevel: number | 
   };
 }
 
+// Align asset closes to benchmark closes by NEAREST daily timestamp within a tolerance.
+// Exact-epoch matching breaks NSE relative strength entirely: Dhan stamps daily bars at
+// 18:30 UTC (IST midnight) while Yahoo ^NSEI stamps 03:45 UTC — they never match, so RS
+// silently returned 0 for every NSE name. The two are ~9.25h apart for the same session;
+// adjacent sessions are ≥14.75h, so a 12h tolerance pairs the right day and no other.
 function alignClose(asset: Bar[], benchmark: Bar[]): { a: number[]; b: number[] } {
-  const benchMap = new Map<number, number>();
-  for (const bar of benchmark) benchMap.set(bar.time, bar.close);
+  if (!benchmark.length || !asset.length) return { a: [], b: [] };
+  const sorted = [...benchmark].sort((x, y) => x.time - y.time);
+  const times = sorted.map((x) => x.time);
+  const TOL = 12 * 3600; // 12h
   const a: number[] = [];
   const b: number[] = [];
   for (const bar of asset) {
-    const bc = benchMap.get(bar.time);
-    if (bc !== undefined) {
+    let lo = 0;
+    let hi = times.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (times[mid] < bar.time) lo = mid + 1;
+      else hi = mid;
+    }
+    let best = -1;
+    let bd = Infinity;
+    for (const j of [lo - 1, lo]) {
+      if (j >= 0 && j < times.length) {
+        const d = Math.abs(times[j] - bar.time);
+        if (d < bd) {
+          bd = d;
+          best = j;
+        }
+      }
+    }
+    if (best >= 0 && bd <= TOL) {
       a.push(bar.close);
-      b.push(bc);
+      b.push(sorted[best].close);
     }
   }
   return { a, b };
