@@ -14,6 +14,8 @@ const schema = z.object({
   minScore: z.number().min(0).max(100).default(75),
   manualSymbols: z.string().optional(),
   limit: z.number().int().positive().max(500).optional(),
+  live: z.boolean().optional(),
+  includeWatch: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {

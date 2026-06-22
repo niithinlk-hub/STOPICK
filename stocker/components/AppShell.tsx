@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Wallet,
   X,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -28,6 +29,7 @@ import { InstallButton } from "@/components/pwa/InstallButton";
 
 const NAV = [
   { href: "/", label: "Scanner", icon: Radar },
+  { href: "/coiling", label: "Coiling", icon: Zap },
   { href: "/top-setups", label: "Top Setups", icon: TrendingUp },
   { href: "/relative-strength", label: "Relative Strength", icon: LineChart },
   { href: "/regime", label: "Market Regime", icon: Gauge },
