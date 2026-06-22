@@ -9,6 +9,23 @@ const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const DEFAULT_SETS = ["NSE:tier_1", "NSE:tier_2", "NSE:tier_3", "US:tier_1", "US:tier_2", "US:tier_3"];
 
+/**
+ * Sets to scan right now (UTC), so each intraday run only touches the market that's open —
+ * cuts scan time ~half. NSE session ≈ 03:30–10:30 UTC; US ≈ 13:00–21:00 UTC. Returns [] when
+ * both are closed (weekend or off-hours) so the run is a no-op.
+ */
+function sessionSets(allSets: string[]): string[] {
+  const now = new Date();
+  const day = now.getUTCDay();
+  if (day === 0 || day === 6) return []; // weekend — markets closed
+  const mins = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const inNSE = mins >= 210 && mins <= 630;
+  const inUS = mins >= 780 && mins <= 1260;
+  if (inNSE) return allSets.filter((s) => s.startsWith("NSE:"));
+  if (inUS) return allSets.filter((s) => s.startsWith("US:"));
+  return [];
+}
+
 export interface CoilingAlertResult {
   sent: boolean;
   alerts: number;
@@ -34,7 +51,10 @@ export async function sendCoilingAlert(opts: {
 
   let watch = opts.rows;
   if (!watch) {
-    const sets = cfg.sets.length ? cfg.sets : DEFAULT_SETS;
+    // Only scan the market that's open right now (NSE during NSE hours, US during US
+    // hours) — trims each intraday run. Skip entirely when both are closed.
+    const sets = sessionSets(cfg.sets.length ? cfg.sets : DEFAULT_SETS);
+    if (!sets.length) return { sent: false, alerts: 0, note: "Markets closed — no scan." };
     const secret = process.env.CRON_SECRET;
     const headers = secret ? { authorization: `Bearer ${secret}` } : undefined;
     const results = await Promise.all(
