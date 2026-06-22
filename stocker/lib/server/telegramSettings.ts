@@ -26,7 +26,7 @@ function defaults(): TelegramSettings {
     preclose: true,
     intradayEnabled: true,
     intradayTf: process.env.TELEGRAM_INTRADAY_TF || "15m",
-    coilingMin: Number(process.env.TELEGRAM_COILING_MIN ?? 90),
+    coilingMin: Number(process.env.TELEGRAM_COILING_MIN ?? 95),
   };
 }
 
