@@ -22,15 +22,17 @@ export async function GET(req: Request) {
   const minScore = Number(u.searchParams.get("minScore") ?? 75);
   const limit = Number(u.searchParams.get("limit") ?? 600);
   const live = u.searchParams.get("live") === "1";
+  const watch = u.searchParams.get("watch") === "1";
 
   try {
-    const r = await runScan({ country: market, source, timeframe: "1d", setupMode: "both", minScore, limit, live });
+    const r = await runScan({ country: market, source, timeframe: "1d", setupMode: "both", minScore, limit, live, includeWatch: watch });
     return NextResponse.json({
       market,
       source,
       scanned: r.scannedSymbols,
       successful: r.successfulSymbols,
       rows: r.rows.filter((x) => x.score >= minScore),
+      watch: r.watch ?? [],
     });
   } catch (err) {
     return NextResponse.json({ market, source, scanned: 0, rows: [], error: String(err) });

@@ -6,6 +6,7 @@
 import "server-only";
 import type {
   Bar,
+  BreakoutSignal,
   RegimeSignal,
   ScanParams,
   ScanResponse,
@@ -13,6 +14,8 @@ import type {
   SetupFamily,
   SetupSignal,
   Timeframe,
+  TrendSignal,
+  WatchRow,
 } from "./types";
 import { CONFIG } from "../config";
 import { fetchEventDays, fetchOhlcv } from "../data/yahoo";
@@ -55,6 +58,53 @@ function injectLiveBar(daily: Bar[], q: DhanQuote): Bar[] {
     volume: q.volume || 0,
   };
   return sameDay ? [...daily.slice(0, -1), live] : [...daily, live];
+}
+
+const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+
+/**
+ * Pre-breakout ("coiling") candidate: a tight base sitting JUST BELOW its breakout
+ * trigger that has NOT fired yet — the chance to position before the move. Returns null
+ * unless price is within ~5% under the trigger, the base is tight, and trend isn't down.
+ * Readiness blends proximity-to-trigger, tightness, relative strength, and volume dry-up.
+ */
+function coilingWatch(
+  display: string,
+  market: Market,
+  sector: string,
+  breakout: BreakoutSignal,
+  trend: TrendSignal,
+  rsScore: number | null,
+): WatchRow | null {
+  if (breakout.isValid) return null; // already broken — not "before the break"
+  const trigger = breakout.breakoutLevel;
+  const dist = breakout.distancePct; // (price/trigger - 1) * 100
+  if (trigger == null || dist == null) return null;
+  const MAX_BELOW = 5;
+  if (dist > -0.1 || dist < -MAX_BELOW) return null; // must sit just under the trigger
+  if (trend.direction === "bearish") return null;
+  if (breakout.tightnessScore < 50) return null;
+
+  const proximity = 1 - Math.min(Math.abs(dist), MAX_BELOW) / MAX_BELOW;
+  const tight = breakout.tightnessScore / 100;
+  const rsN = (rsScore ?? 0) / 100;
+  const vol = breakout.volumeExpansion;
+  const dryUp = vol <= 1 ? 1 : clamp01(1 - (vol - 1)); // contraction before expansion
+  const readiness = Math.round((0.4 * proximity + 0.3 * tight + 0.2 * rsN + 0.1 * dryUp) * 1000) / 10;
+  if (readiness < 50) return null;
+
+  return {
+    ticker: display,
+    market,
+    sector,
+    pattern: breakout.patternName,
+    trigger: round(trigger, 2),
+    currentPrice: round(breakout.currentPrice, 2),
+    distancePct: round(dist, 2),
+    tightness: breakout.tightnessScore,
+    rsScore,
+    readiness,
+  };
 }
 
 function timeframesForScan(tf: Timeframe): Timeframe[] {
@@ -212,6 +262,7 @@ export async function runScan(params: ScanParams): Promise<ScanResponse> {
   };
 
   const setups: SetupSignal[] = [];
+  const watchRows: WatchRow[] = [];
 
   await mapWithConcurrency(records, 8, async (record) => {
     try {
@@ -272,6 +323,12 @@ export async function runScan(params: ScanParams): Promise<ScanResponse> {
       const atrPctile =
         scanFrame.length >= 30 ? round(last(rollingPercentile(atr(scanFrame, 14), 252), 0) * 100, 2) : 0;
       const chartPattern = detectChartPattern(scanFrame);
+
+      // Pre-breakout watch: coiling names with no fired setup yet (no active breakout/pullback).
+      if (params.includeWatch && !breakout.isValid && !pullback.isValid && !circuit) {
+        const w = coilingWatch(record.display, record.market, record.sector, breakout, trend, relativeStrength.score);
+        if (w) watchRows.push(w);
+      }
 
       const families: SetupFamily[] = params.setupMode === "both" ? ["breakout", "pullback"] : [params.setupMode];
       for (const family of families) {
@@ -369,6 +426,8 @@ export async function runScan(params: ScanParams): Promise<ScanResponse> {
     whyQualified: s.reasonsFor.slice(0, 3).join(" | "),
   }));
 
+  watchRows.sort((a, b) => b.readiness - a.readiness);
+
   const successful = records.length - Object.keys(failures).length;
   return {
     rows,
@@ -381,5 +440,6 @@ export async function runScan(params: ScanParams): Promise<ScanResponse> {
     notes,
     generatedAt: startedAt,
     elapsedMs: Date.now() - startedAt,
+    watch: params.includeWatch ? watchRows.slice(0, 60) : undefined,
   };
 }

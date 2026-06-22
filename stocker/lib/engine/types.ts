@@ -276,6 +276,8 @@ export interface ScanParams {
   limit?: number;
   /** Inject a live forming daily candle from Dhan quotes (pre-close runs). NSE only. */
   live?: boolean;
+  /** Also collect pre-breakout "coiling" candidates into ScanResponse.watch. */
+  includeWatch?: boolean;
 }
 
 export interface ScanRow {
@@ -306,6 +308,20 @@ export interface ScanRow {
   whyQualified: string;
 }
 
+/** A pre-breakout ("coiling") candidate — tight base just under its trigger, not yet broken. */
+export interface WatchRow {
+  ticker: string;
+  market: Market;
+  sector: string;
+  pattern: string;
+  trigger: number;       // breakout level to clear
+  currentPrice: number;
+  distancePct: number;   // negative — % below the trigger
+  tightness: number;     // 0..100, higher = tighter coil
+  rsScore: number | null;
+  readiness: number;     // 0..100 composite (proximity + tightness + RS + dry-up)
+}
+
 export interface ScanResponse {
   rows: ScanRow[];
   setups: SetupSignal[];
@@ -317,6 +333,8 @@ export interface ScanResponse {
   notes: string[];
   generatedAt: number;
   elapsedMs: number;
+  /** Pre-breakout watch list (populated when ScanParams.includeWatch). */
+  watch?: WatchRow[];
 }
 
 export interface SymbolDetailResponse {

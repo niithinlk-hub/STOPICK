@@ -3,7 +3,7 @@ import { sendTelegram } from "@/lib/telegram";
 import { tradingViewUrl } from "@/lib/tradingview";
 import { getTelegramSettings } from "@/lib/server/telegramSettings";
 import { getDhanTokenStatus } from "@/lib/server/dhanToken";
-import type { Market, ScanRow } from "@/lib/engine/types";
+import type { Market, ScanRow, WatchRow } from "@/lib/engine/types";
 
 const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -53,20 +53,25 @@ export async function sendSetupDigest(opts: {
   const sets = cfg.sets.length ? cfg.sets : DEFAULT_SETS.split(",");
   const secret = process.env.CRON_SECRET;
   const headers = secret ? { authorization: `Bearer ${secret}` } : undefined;
+  // Coiling pre-breakout watch list — names about to break, BEFORE the move. On by
+  // default; set TELEGRAM_WATCH=0 to drop the section.
+  const wantWatch = process.env.TELEGRAM_WATCH !== "0";
+  const watchTopN = Number(process.env.TELEGRAM_WATCH_TOP_N ?? 12);
 
   const results = await Promise.all(
     sets.map(async (set) => {
       const [market, source] = set.split(":");
       const url =
         `${origin}/api/cron/scan-set?market=${market}&source=${source}&minScore=${minScore}&limit=${setLimit}` +
-        (provisional ? "&live=1" : "");
+        (provisional ? "&live=1" : "") +
+        (wantWatch ? "&watch=1" : "");
       try {
         const r = await fetch(url, { headers, cache: "no-store" });
-        if (!r.ok) return { set, rows: [] as ScanRow[], scanned: 0 };
-        const j = (await r.json()) as { rows?: ScanRow[]; scanned?: number };
-        return { set, rows: j.rows ?? [], scanned: j.scanned ?? 0 };
+        if (!r.ok) return { set, rows: [] as ScanRow[], scanned: 0, watch: [] as WatchRow[] };
+        const j = (await r.json()) as { rows?: ScanRow[]; scanned?: number; watch?: WatchRow[] };
+        return { set, rows: j.rows ?? [], scanned: j.scanned ?? 0, watch: j.watch ?? [] };
       } catch {
-        return { set, rows: [] as ScanRow[], scanned: 0 };
+        return { set, rows: [] as ScanRow[], scanned: 0, watch: [] as WatchRow[] };
       }
     }),
   );
@@ -74,11 +79,14 @@ export async function sendSetupDigest(opts: {
   const perSet: Record<string, number> = {};
   let scannedTotal = 0;
   const allRows: ScanRow[] = [];
+  const allWatch: WatchRow[] = [];
   for (const r of results) {
     perSet[SET_LABEL[r.set] ?? r.set] = r.rows.length;
     scannedTotal += r.scanned;
     allRows.push(...r.rows);
+    allWatch.push(...r.watch);
   }
+  allWatch.sort((a, b) => b.readiness - a.readiness);
   allRows.sort((a, b) => b.score - a.score);
   const top = allRows.slice(0, topN);
 
@@ -125,6 +133,24 @@ export async function sendSetupDigest(opts: {
   }
 
   const more = allRows.length > top.length ? `\n\n…and ${allRows.length - top.length} more (top ${topN} shown).` : "";
-  const sent = await sendTelegram(`${header}${warn}${dhanWarn}\n\n${body}${more}`, cfg.chatId ?? undefined);
+
+  // Pre-breakout "coiling" watch — names sitting just under their trigger, BEFORE the move.
+  const watchTop = allWatch.slice(0, watchTopN);
+  const watchBlock =
+    wantWatch && watchTop.length
+      ? "\n\n🔜 <b>Coiling — watch to break</b> <i>(not triggered yet)</i>\n\n" +
+        watchTop
+          .map((w) => {
+            const url = tradingViewUrl(w.ticker, w.market);
+            return (
+              `${mkt(w.market)} <b>${esc(w.ticker)}</b> ⚡${Math.round(w.readiness)} — ` +
+              `trigger ${fmt(w.trigger)} (${w.distancePct.toFixed(1)}% away · tight ${Math.round(w.tightness)})\n  ` +
+              `<a href="${url}">TradingView</a>`
+            );
+          })
+          .join("\n\n")
+      : "";
+
+  const sent = await sendTelegram(`${header}${warn}${dhanWarn}\n\n${body}${more}${watchBlock}`, cfg.chatId ?? undefined);
   return { sent: sent.ok, error: sent.error, sets, scanned: scannedTotal, qualified: allRows.length, perSet };
 }
