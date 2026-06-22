@@ -27,6 +27,8 @@ export interface DigestResult {
   scanned: number;
   qualified: number;
   perSet: Record<string, number>;
+  /** All coiling rows collected this run (for the ≥threshold alert, no re-scan). */
+  watch: WatchRow[];
 }
 
 /**
@@ -43,7 +45,7 @@ export async function sendSetupDigest(opts: {
 }): Promise<DigestResult> {
   const { provisional = false, origin, force = false } = opts;
   const cfg = await getTelegramSettings();
-  const off = (error: string): DigestResult => ({ sent: false, error, sets: [], scanned: 0, qualified: 0, perSet: {} });
+  const off = (error: string): DigestResult => ({ sent: false, error, sets: [], scanned: 0, qualified: 0, perSet: {}, watch: [] });
   if (!force && !cfg.enabled) return off("Telegram digest disabled in settings.");
   if (!force && provisional && !cfg.preclose) return off("Pre-close run disabled in settings.");
 
@@ -152,5 +154,5 @@ export async function sendSetupDigest(opts: {
       : "";
 
   const sent = await sendTelegram(`${header}${warn}${dhanWarn}\n\n${body}${more}${watchBlock}`, cfg.chatId ?? undefined);
-  return { sent: sent.ok, error: sent.error, sets, scanned: scannedTotal, qualified: allRows.length, perSet };
+  return { sent: sent.ok, error: sent.error, sets, scanned: scannedTotal, qualified: allRows.length, perSet, watch: allWatch };
 }

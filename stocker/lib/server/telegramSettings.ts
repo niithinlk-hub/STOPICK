@@ -12,6 +12,8 @@ export interface TelegramSettings {
   preclose: boolean;
   intradayEnabled: boolean;
   intradayTf: string;
+  /** Readiness threshold (0–100) for the pre-breakout "coiling primed" alert. */
+  coilingMin: number;
 }
 
 function defaults(): TelegramSettings {
@@ -24,6 +26,7 @@ function defaults(): TelegramSettings {
     preclose: true,
     intradayEnabled: true,
     intradayTf: process.env.TELEGRAM_INTRADAY_TF || "15m",
+    coilingMin: Number(process.env.TELEGRAM_COILING_MIN ?? 90),
   };
 }
 
@@ -57,6 +60,7 @@ export async function getTelegramSettings(): Promise<TelegramSettings & { userId
       preclose: typeof t.preclose === "boolean" ? t.preclose : d.preclose,
       intradayEnabled: typeof t.intradayEnabled === "boolean" ? t.intradayEnabled : d.intradayEnabled,
       intradayTf: t.intradayTf ?? d.intradayTf,
+      coilingMin: typeof t.coilingMin === "number" ? t.coilingMin : d.coilingMin,
       userId,
     };
   } catch {
