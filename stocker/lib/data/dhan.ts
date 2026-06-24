@@ -19,7 +19,9 @@ const MAP = nseMap as Record<string, string>;
 const ROOT = "https://api.dhan.co/v2";
 
 export function dhanEnabled(): boolean {
-  return (process.env.NSE_DATA_SOURCE ?? "dhan").toLowerCase() !== "yahoo";
+  // Default to Yahoo: Dhan needs a live ~24h token, and an expired one stalls NSE
+  // scans. Opt into Dhan explicitly with NSE_DATA_SOURCE=dhan.
+  return (process.env.NSE_DATA_SOURCE ?? "yahoo").toLowerCase() === "dhan";
 }
 
 // Live scrip overlay: the refresh cron stores a fresh ticker→securityId map in Supabase
