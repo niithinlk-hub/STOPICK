@@ -62,12 +62,38 @@ export async function GET(req: Request) {
     })(),
   ]);
 
-  // Optional experimental profile: same weights, liquidity bumped — isolated to this tool.
-  let profileOverride: ScoringProfile | undefined;
-  if (liqWeight != null && Number.isFinite(Number(liqWeight))) {
-    const base = CONFIG.scoringProfiles.bullish_breakout;
-    profileOverride = { ...base, weights: { ...base.weights, liquidity: Number(liqWeight) } };
+  // Optional experimental profile — isolated to this tool, never touches the live scanner.
+  // `weights=key:val,key:val` overrides component weights; `thresholds=A+:88,A:80,B:70,C:60`
+  // overrides grade cutoffs; `liqWeight` kept for back-compat. Lets weights/thresholds be
+  // A/B-tested by query string without a redeploy.
+  const base = CONFIG.scoringProfiles.bullish_breakout;
+  const weights: Record<string, number> = { ...base.weights };
+  const gradeThresholds: Record<string, number> = { ...base.gradeThresholds };
+  if (liqWeight != null && Number.isFinite(Number(liqWeight))) weights.liquidity = Number(liqWeight);
+  const wParam = u.searchParams.get("weights");
+  if (wParam) {
+    for (const pair of wParam.split(",")) {
+      const idx = pair.indexOf(":");
+      if (idx <= 0) continue;
+      const k = pair.slice(0, idx).trim();
+      const v = Number(pair.slice(idx + 1));
+      if (k in weights && Number.isFinite(v)) weights[k] = v;
+    }
   }
+  const tParam = u.searchParams.get("thresholds");
+  if (tParam) {
+    for (const pair of tParam.split(",")) {
+      const idx = pair.lastIndexOf(":");
+      if (idx <= 0) continue;
+      const k = pair.slice(0, idx).trim();
+      const v = Number(pair.slice(idx + 1));
+      if (Number.isFinite(v)) gradeThresholds[k] = v;
+    }
+  }
+  const overridden = wParam != null || tParam != null || (liqWeight != null && Number.isFinite(Number(liqWeight)));
+  const profileOverride: ScoringProfile | undefined = overridden
+    ? ({ ...base, weights, gradeThresholds } as unknown as ScoringProfile)
+    : undefined;
 
   const result = validateEngine(items, bench, market, { horizonBars: horizon, profileOverride, targetR, stopAtrMult });
   return NextResponse.json({

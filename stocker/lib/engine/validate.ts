@@ -48,6 +48,7 @@ export interface ValidateResult {
   overall: { trades: number; winRate: number; expectancyR: number; targetHitRate: number };
   monotonicGrade: boolean; // expectancy rises A+ >= A >= B >= C ?
   spearman: number; // rank corr between score and realized R (−1..1)
+  componentCorr: { component: string; corr: number }[]; // each component's rank corr with realized R
   notes: string[];
 }
 
@@ -58,6 +59,7 @@ interface RawTrade {
   fwdRetPct: number;
   win: boolean;
   hitTarget: boolean;
+  breakdown: Record<string, number>;
 }
 
 const GRADES = ["A+", "A", "B", "C"];
@@ -118,6 +120,7 @@ function analyzeAt(
   const scored = scoreSetup(setup, profile);
   setup.score = scored.score;
   setup.grade = scored.grade;
+  setup.breakdown = scored.breakdown;
   void pullback;
   return { setup, entry: setup.executionPlan.entry, stop: setup.executionPlan.stop, target: setup.executionPlan.target2r };
 }
@@ -189,6 +192,7 @@ export function validateEngine(
         fwdRetPct: (exitPrice / entry - 1) * 100,
         win: exitPrice > entry,
         hitTarget,
+        breakdown: res.setup.breakdown,
       });
       t = exitIdx + 1; // no overlapping trades per symbol
     }
@@ -231,6 +235,13 @@ export function validateEngine(
   const overallN = trades.length;
   if (!overallN) notes.push("No fired breakout setups in the window — widen the sample or history.");
 
+  // Per-component predictive power: rank-corr of each component's 0–100 value vs realized R.
+  // Drives re-weighting — boost components that actually rank winners, defund the flat/collinear ones.
+  const rArr = trades.map((x) => x.r);
+  const componentCorr = Object.keys(CONFIG.scoringProfiles.bullish_breakout.weights)
+    .map((k) => ({ component: k, corr: spearman(trades.map((x) => x.breakdown[k] ?? 0), rArr) }))
+    .sort((a, b) => b.corr - a.corr);
+
   return {
     symbols: items.length,
     horizonBars: horizon,
@@ -245,6 +256,7 @@ export function validateEngine(
     },
     monotonicGrade: monotonic,
     spearman: spearman(trades.map((x) => x.score), trades.map((x) => x.r)),
+    componentCorr,
     notes,
   };
 }
