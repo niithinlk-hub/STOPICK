@@ -39,7 +39,9 @@ export async function GET(req: Request) {
   const market = (u.searchParams.get("market") === "US" ? "US" : "NSE") as Market;
   const source = (u.searchParams.get("source") || "tier_1") as UniverseSource;
   const sample = Math.min(Number(u.searchParams.get("sample") ?? 20), 40);
-  const horizon = Math.min(Number(u.searchParams.get("horizon") ?? 10), 40);
+  // Default 20 bars (~4 trading weeks). A 10-bar horizon almost never lets a 2R target fill
+  // (intrabar hit rate ~1%), which made the strategy look worse than its real swing horizon.
+  const horizon = Math.min(Number(u.searchParams.get("horizon") ?? 20), 40);
   const liqWeight = u.searchParams.get("liqWeight");
   const targetRParam = u.searchParams.get("targetR");
   const stopAtrParam = u.searchParams.get("stopAtr");

@@ -146,7 +146,7 @@ export function validateEngine(
   items: { symbol: string; bars: Bar[] }[],
   bench: Bar[],
   market: Market,
-  opts: { horizonBars?: number; profileOverride?: ScoringProfile; targetR?: number; stopAtrMult?: number } = {},
+  opts: { horizonBars?: number; profileOverride?: ScoringProfile; targetR?: number; stopAtrMult?: number; regimeGate?: boolean } = {},
 ): ValidateResult {
   const horizon = opts.horizonBars ?? 10;
   const targetR = opts.targetR ?? 2;
@@ -167,6 +167,11 @@ export function validateEngine(
       const benchSlice = benchByTime.filter((b) => b.time <= cutoff);
       const res = analyzeAt(frame, benchSlice, market, benchSym, profile, "breakout");
       if (!res || res.setup.grade === "Reject") {
+        t++;
+        continue;
+      }
+      // Regime gate (experimental): only take longs when the index regime isn't bearish.
+      if (opts.regimeGate && res.setup.regime && res.setup.regime.direction === "bearish") {
         t++;
         continue;
       }
