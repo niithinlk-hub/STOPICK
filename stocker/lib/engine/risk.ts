@@ -7,7 +7,17 @@ import { round } from "./indicators";
 
 export function buildExecutionPlan(
   setup: SetupSignal,
-  opts: { capitalBase: number; riskPerTradePct: number; portfolioExposurePct?: number; correlationPenaltyPct?: number },
+  opts: {
+    capitalBase: number;
+    riskPerTradePct: number;
+    portfolioExposurePct?: number;
+    correlationPenaltyPct?: number;
+    /** Latest ATR(14) of the scan frame. When provided, stop depth is capped at
+     * maxStopAtrMult×ATR — structural base lows are often 4–6 ATR deep, which crushes
+     * realized R (walk-forward validated: capping raised expectancy in every +EV cell). */
+    atrValue?: number;
+    maxStopAtrMult?: number;
+  },
 ): ExecutionPlan {
   const portfolioExposurePct = opts.portfolioExposurePct ?? 0;
   const correlationPenaltyPct = opts.correlationPenaltyPct ?? 0;
@@ -24,7 +34,16 @@ export function buildExecutionPlan(
 
   const atrStop = Math.min(stop, entry - Math.max(Math.abs(entry - stop), 0.01));
   const structureStop = setup.structure.invalidationLevel ?? stop;
-  const riskPerShare = Math.max(entry - Math.min(atrStop, structureStop), 0.01);
+  let finalStop = Math.min(atrStop, structureStop);
+  // Cap stop depth at k×ATR below the realistic fill (only binds when the structural stop
+  // is deeper). Reference is max(entry, currentPrice): the plan entry is the buffered
+  // trigger level, which a fresh breakout has already cleared — real fills land at or
+  // above the current price, and the walk-forward that validated the cap entered there.
+  if (opts.atrValue !== undefined && Number.isFinite(opts.atrValue) && opts.atrValue > 0) {
+    const fillRef = Math.max(entry, setup.breakout.currentPrice);
+    finalStop = Math.max(finalStop, fillRef - opts.atrValue * (opts.maxStopAtrMult ?? 3));
+  }
+  const riskPerShare = Math.max(entry - finalStop, 0.01);
   const capitalRisk = opts.capitalBase * (opts.riskPerTradePct / 100);
   const rawPosition = capitalRisk / riskPerShare;
   const adjustedPosition =
@@ -33,7 +52,6 @@ export function buildExecutionPlan(
   const target1r = entry + riskPerShare;
   const target2r = entry + riskPerShare * 2;
   const target3r = entry + riskPerShare * 3;
-  const finalStop = Math.min(atrStop, structureStop);
   const positionShares = Math.max(Math.floor(adjustedPosition), 0);
 
   const warnings: string[] = [];

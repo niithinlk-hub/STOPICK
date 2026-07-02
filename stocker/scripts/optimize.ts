@@ -82,37 +82,46 @@ const US = [
   "CAT","GE","BA","NKE","HON","UNP","LOW","INTU","AMAT","NOW",
 ];
 
-async function runMarket(market: Market, syms: string[], benchSym: string, suffix: string) {
-  console.log(`\n######## ${market} (${syms.length} names) ########`);
+// Phase 2 (2026-06-26): universe + stop-geometry test. Weights are already re-fit and LIVE
+// (RS 16) — here BASE = live config. Questions: (a) do mid-cap tier_2 breakouts carry more
+// edge than tier_1 large caps? (b) does a wider/tighter ATR stop beat the plan stop?
+// (c) do the realized score-bins justify moving grade thresholds?
+import { UNIVERSES } from "../lib/data/universe";
+
+/** Evenly-strided sample so we span the whole tier list, not just its (cap-ordered) head. */
+function sample(list: string[], n: number): string[] {
+  if (list.length <= n) return [...list];
+  const step = list.length / n;
+  return Array.from({ length: n }, (_, i) => list[Math.floor(i * step)]);
+}
+
+const fmt = (r: any) =>
+  `trades=${r.overall.trades} spearman=${r.spearman} expR=${r.overall.expectancyR} win=${r.overall.winRate}% ` +
+  `hit=${r.overall.targetHitRate}% byGrade=[${r.byGrade.map((g: any) => `${g.grade}:${g.expectancyR}(${g.trades})`).join(" ")}]`;
+
+async function runUniverse(market: Market, label: string, syms: string[], benchSym: string, suffix: string) {
+  console.log(`\n######## ${market} ${label} (${syms.length} names) ########`);
   const bench = await fetchBars(benchSym);
   const fetched = await mapLimit(syms, 6, async (s) => ({ symbol: s, bars: await fetchBars(`${s}${suffix}`) }));
   const items = fetched.filter((x) => x.bars.length >= 300);
   console.log(`bench ${benchSym} bars=${bench.length}, symbols >=300 bars: ${items.length}/${syms.length}`);
 
-  const fmt = (r: any) =>
-    `trades=${r.overall.trades} spearman=${r.spearman} expR=${r.overall.expectancyR} win=${r.overall.winRate}% ` +
-    `byGrade=[${r.byGrade.map((g: any) => `${g.grade}:${g.expectancyR}(${g.trades})`).join(" ")}]`;
-
-  for (const horizon of [20, 40]) {
-    const baseR = validateEngine(items, bench, market, { horizonBars: horizon, targetR: 2 });
-    const rsR = validateEngine(items, bench, market, {
-      horizonBars: horizon, targetR: 2, profileOverride: profile(RS_WEIGHTS, BASE.gradeThresholds as any),
-    });
-    const gateR = validateEngine(items, bench, market, { horizonBars: horizon, targetR: 2, regimeGate: true });
-    const rsGateR = validateEngine(items, bench, market, {
-      horizonBars: horizon, targetR: 2, regimeGate: true, profileOverride: profile(RS_WEIGHTS, BASE.gradeThresholds as any),
-    });
-    console.log(`-- horizon ${horizon} tR2 --`);
-    console.log("  BASE       :", fmt(baseR));
-    console.log("  RSweight   :", fmt(rsR));
-    console.log("  regimeGate :", fmt(gateR));
-    console.log("  RS+gate    :", fmt(rsGateR));
-  }
+  // Cap test: structural plan stop, but depth capped at k×ATR (only binds on deep base lows).
+  const planStop = validateEngine(items, bench, market, { horizonBars: 20, targetR: 2 });
+  const cap25 = validateEngine(items, bench, market, { horizonBars: 20, targetR: 2, stopAtrCap: 2.5 });
+  const cap3 = validateEngine(items, bench, market, { horizonBars: 20, targetR: 2, stopAtrCap: 3 });
+  console.log("  planStop:", fmt(planStop));
+  console.log("  cap2.5  :", fmt(cap25));
+  console.log("  cap3.0  :", fmt(cap3));
 }
 
 async function main() {
-  await runMarket("NSE", NSE, "^NSEI", ".NS");
-  await runMarket("US", US, "SPY", "");
+  const nseT2 = sample(UNIVERSES.NSE.tier_2, 60).map((s) => s.replace(/\.NS$/, ""));
+  const usT2 = sample(UNIVERSES.US.tier_2, 60);
+  await runUniverse("NSE", "tier_1", NSE, "^NSEI", ".NS");
+  await runUniverse("NSE", "tier_2", nseT2, "^NSEI", ".NS");
+  await runUniverse("US", "tier_1", US, "SPY", "");
+  await runUniverse("US", "tier_2", usT2, "SPY", "");
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -194,6 +194,8 @@ export async function analyzeSymbol(
   setup.executionPlan = buildExecutionPlan(setup, {
     capitalBase: CONFIG.runtime.capitalBase,
     riskPerTradePct: CONFIG.runtime.riskPerTradePct,
+    atrValue: last(atr(scanFrame, 14), 0),
+    maxStopAtrMult: CONFIG.runtime.maxStopAtrMult,
   });
   setup.riskWarnings = setup.executionPlan.warnings;
   const profile = CONFIG.scoringProfiles[family === "pullback" ? "bullish_pullback" : "bullish_breakout"];
@@ -380,6 +382,8 @@ export async function runScan(params: ScanParams): Promise<ScanResponse> {
         setup.executionPlan = buildExecutionPlan(setup, {
           capitalBase: CONFIG.runtime.capitalBase,
           riskPerTradePct: CONFIG.runtime.riskPerTradePct,
+          atrValue: last(atr(scanFrame, 14), 0),
+          maxStopAtrMult: CONFIG.runtime.maxStopAtrMult,
         });
         setup.riskWarnings = setup.executionPlan.warnings;
 

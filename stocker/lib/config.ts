@@ -19,6 +19,11 @@ export const CONFIG: AppConfig = {
     // midcaps trade ₹1–4cr/day and must qualify; the liquidity *score* (log-scaled)
     // ranks thinner names lower without removing them. Override with MIN_TURNOVER_INR.
     minTurnoverInr: 5_000_000,
+    // Max stop depth in ATR units. Structural stops (base low) are often 4–6 ATR deep,
+    // which crushes realized R. Walk-forward (2026-06-26, 4 market×tier cells): capping at
+    // 3×ATR raised expectancy in every +EV cell (US t2 +0.082→+0.146, NSE t2 +0.018→+0.075,
+    // US t1 +0.006→+0.065) and roughly tripled A-grade expectancy. 2.5 tested slightly worse.
+    maxStopAtrMult: 3,
   },
   benchmarkMap: {
     NSE: { broad: "^NSEI", broad_alt: "^CRSLDX", bank: "^NSEBANK", tech: "^CNXIT" },

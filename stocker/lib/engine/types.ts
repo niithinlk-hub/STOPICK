@@ -254,6 +254,8 @@ export interface RuntimeConfig {
   /** STOCKER addition — minimum 20d turnover to be considered tradable. */
   minTurnoverUsd: number;
   minTurnoverInr: number;
+  /** Max stop depth in ATR units — structural stops deeper than this are capped (walk-forward validated). */
+  maxStopAtrMult: number;
 }
 
 export interface AppConfig {

@@ -106,6 +106,7 @@ export async function GET(req: Request) {
     horizon,
     targetR: targetR ?? 2,
     stopAtr: stopAtrMult ?? null,
+    stopCap: CONFIG.runtime.maxStopAtrMult,
     liqWeight: liqWeight != null ? Number(liqWeight) : CONFIG.scoringProfiles.bullish_breakout.weights.liquidity,
     ...result,
   });

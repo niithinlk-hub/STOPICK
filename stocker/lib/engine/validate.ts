@@ -116,7 +116,12 @@ function analyzeAt(
     eventRiskDays: null,
     atrPercentile: frame.length >= 30 ? round(last(rollingPercentile(atr(frame, 14), 252), 0) * 100, 2) : 0,
   };
-  setup.executionPlan = buildExecutionPlan(setup, { capitalBase: CONFIG.runtime.capitalBase, riskPerTradePct: CONFIG.runtime.riskPerTradePct });
+  setup.executionPlan = buildExecutionPlan(setup, {
+    capitalBase: CONFIG.runtime.capitalBase,
+    riskPerTradePct: CONFIG.runtime.riskPerTradePct,
+    atrValue: last(atr(frame, 14), 0),
+    maxStopAtrMult: CONFIG.runtime.maxStopAtrMult,
+  });
   const scored = scoreSetup(setup, profile);
   setup.score = scored.score;
   setup.grade = scored.grade;
@@ -146,7 +151,7 @@ export function validateEngine(
   items: { symbol: string; bars: Bar[] }[],
   bench: Bar[],
   market: Market,
-  opts: { horizonBars?: number; profileOverride?: ScoringProfile; targetR?: number; stopAtrMult?: number; regimeGate?: boolean } = {},
+  opts: { horizonBars?: number; profileOverride?: ScoringProfile; targetR?: number; stopAtrMult?: number; stopAtrCap?: number; regimeGate?: boolean } = {},
 ): ValidateResult {
   const horizon = opts.horizonBars ?? 10;
   const targetR = opts.targetR ?? 2;
@@ -179,7 +184,9 @@ export function validateEngine(
       const entryIdx = t + 1;
       const entry = bars[entryIdx].open;
       const a = Number.isFinite(last(atr(frame, 14))) ? last(atr(frame, 14)) : entry * 0.03;
-      const stop = opts.stopAtrMult ? entry - a * opts.stopAtrMult : res.stop < entry ? res.stop : entry - a * 1.5;
+      let stop = opts.stopAtrMult ? entry - a * opts.stopAtrMult : res.stop < entry ? res.stop : entry - a * 1.5;
+      // Cap variant: keep the structural stop but never allow it deeper than k×ATR below entry.
+      if (opts.stopAtrCap) stop = Math.max(stop, entry - a * opts.stopAtrCap);
       const target = entry + (entry - stop) * targetR;
       const lastIdx = Math.min(bars.length - 1, entryIdx + horizon);
       let exitPrice = bars[lastIdx].close;
